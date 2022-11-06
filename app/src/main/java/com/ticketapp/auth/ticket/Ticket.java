@@ -730,8 +730,16 @@ public class Ticket {
         // Or it is a corrupted card with suspicious data
         if (cnt - backupCount > 1 || cnt - backupCount < 0) {
             Utilities.log("Unreasonable backup counter!", true);
+            infoToShow = "Corrupted Ticket!";
             return false;
             // throw new GeneralSecurityException("Unreasonable backup counter!");
+        }
+
+        if (maxRide - cnt > MAX_RIDE_CARD) {
+            Utilities.log("Unreasonable rides available!", true);
+            infoToShow = "Unreasonable available rides!\nRemaining: " + (maxRide - cnt);
+            return false;
+            // throw new GeneralSecurityException("Unreasonable rides available!");
         }
 
         // TODO: Change the expiry time to be in days
