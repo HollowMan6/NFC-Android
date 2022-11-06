@@ -3,5 +3,5 @@
     android:id="@+id/container"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context="com.ticketapp.auth.app.main.TicketActivity"
+    tools:context="com.ticketapp.wipe.app.main.TicketActivity"
     tools:ignore="MergeRootFrame" />

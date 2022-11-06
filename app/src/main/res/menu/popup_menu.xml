@@ -1,6 +1,6 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
-    tools:context="com.ticketapp.auth.app.fragments.ToolsFragment">
+    tools:context="com.ticketapp.wipe.app.fragments.ToolsFragment">
 
     <item
         android:orderInCategory="0"

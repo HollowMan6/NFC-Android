@@ -1,4 +1,4 @@
-package com.ticketapp.auth.app.ulctools;
+package com.ticketapp.wipe.app.ulctools;
 
 /**
  * Dump data in hexadecimal and other formats.

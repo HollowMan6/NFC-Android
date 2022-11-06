@@ -1,4 +1,4 @@
-package com.ticketapp.auth.ticket;
+package com.ticketapp.wipe.ticket;
 
 import java.security.GeneralSecurityException;
 

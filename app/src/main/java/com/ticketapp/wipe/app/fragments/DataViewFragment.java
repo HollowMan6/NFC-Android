@@ -1,4 +1,4 @@
-package com.ticketapp.auth.app.fragments;
+package com.ticketapp.wipe.app.fragments;
 /**
  * Developed for Aalto University course CS-E4300 Network Security.
  * Copyright (C) 2022-2023 Aalto University
@@ -13,7 +13,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
-import com.ticketapp.auth.R;
+import com.ticketapp.wipe.R;
 
 public class DataViewFragment extends Fragment {
     private static String content;

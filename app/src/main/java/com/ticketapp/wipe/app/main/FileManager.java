@@ -1,4 +1,4 @@
-package com.ticketapp.auth.app.main;
+package com.ticketapp.wipe.app.main;
 /**
  * Developed for Aalto University course CS-E4300 Network Security.
  * Copyright (C) 2022-2023 Aalto University
@@ -8,10 +8,10 @@ import android.content.Context;
 import android.util.Log;
 import android.widget.Toast;
 
-import com.ticketapp.auth.app.fragments.FileNameComparator;
-import com.ticketapp.auth.app.fragments.KeyListFragment;
-import com.ticketapp.auth.app.ulctools.Reader;
-import com.ticketapp.auth.R;
+import com.ticketapp.wipe.app.fragments.FileNameComparator;
+import com.ticketapp.wipe.app.fragments.KeyListFragment;
+import com.ticketapp.wipe.app.ulctools.Reader;
+import com.ticketapp.wipe.R;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -164,7 +164,7 @@ public class FileManager {
     public static String readFile(Context context, String fileName) {
         String content = "";
         try {
-            BufferedReader in = new BufferedReader(new FileReader(new File("data/data/com.example.auth/files/" + fileName)));
+            BufferedReader in = new BufferedReader(new FileReader(new File("data/data/com.example.wipe/files/" + fileName)));
             StringBuilder builder = new StringBuilder();
 
             String line = "";

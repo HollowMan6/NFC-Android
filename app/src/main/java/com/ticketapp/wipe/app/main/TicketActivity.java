@@ -1,4 +1,4 @@
-package com.ticketapp.auth.app.main;
+package com.ticketapp.wipe.app.main;
 /**
  * Developed for Aalto University course CS-E4300 Network Security.
  * Copyright (C) 2022-2023 Aalto University
@@ -24,13 +24,13 @@ import android.provider.Settings;
 import android.view.Menu;
 import android.widget.ArrayAdapter;
 
-import com.ticketapp.auth.app.fragments.ArchiveFragment;
-import com.ticketapp.auth.app.fragments.ConsolePopup;
-import com.ticketapp.auth.app.fragments.DumpFragment;
-import com.ticketapp.auth.app.fragments.EmulatorFragment;
-import com.ticketapp.auth.app.fragments.KeyListFragment;
-import com.ticketapp.auth.app.ulctools.Reader;
-import com.ticketapp.auth.R;
+import com.ticketapp.wipe.app.fragments.ArchiveFragment;
+import com.ticketapp.wipe.app.fragments.ConsolePopup;
+import com.ticketapp.wipe.app.fragments.DumpFragment;
+import com.ticketapp.wipe.app.fragments.EmulatorFragment;
+import com.ticketapp.wipe.app.fragments.KeyListFragment;
+import com.ticketapp.wipe.app.ulctools.Reader;
+import com.ticketapp.wipe.R;
 
 import java.util.Calendar;
 

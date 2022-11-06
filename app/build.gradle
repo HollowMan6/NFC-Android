@@ -4,7 +4,7 @@ android {
     compileSdkVersion 26
 
     defaultConfig {
-        applicationId "com.example.auth"
+        applicationId "com.example.wipe"
         minSdkVersion 14
         targetSdkVersion 26
     }
@@ -16,7 +16,7 @@ android {
             applicationIdSuffix ".release"
         }
     }
-    namespace 'com.ticketapp.auth'
+    namespace 'com.ticketapp.wipe'
 }
 
 dependencies {

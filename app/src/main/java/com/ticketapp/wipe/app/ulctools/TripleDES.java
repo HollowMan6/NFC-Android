@@ -1,4 +1,4 @@
-package com.ticketapp.auth.app.ulctools;
+package com.ticketapp.wipe.app.ulctools;
 
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;

@@ -15,7 +15,7 @@
         android:label="@string/app_name"
         android:theme="@style/AppTheme" >
         <activity
-            android:name="com.ticketapp.auth.app.main.TicketActivity"
+            android:name="com.ticketapp.wipe.app.main.TicketActivity"
             android:label="@string/app_name"
             android:screenOrientation="portrait" >
             <intent-filter>
@@ -30,7 +30,7 @@
         </activity>
         <provider
             android:name="android.support.v4.content.FileProvider"
-            android:authorities="com.ticketapp.auth.app.fragments.ArchiveFragment"
+            android:authorities="com.ticketapp.wipe.app.fragments.ArchiveFragment"
             android:exported="false"
             android:grantUriPermissions="true" >
             <meta-data

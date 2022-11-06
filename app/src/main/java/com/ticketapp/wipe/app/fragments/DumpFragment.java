@@ -1,4 +1,4 @@
-package com.ticketapp.auth.app.fragments;
+package com.ticketapp.wipe.app.fragments;
 /**
  * Developed for Aalto University course CS-E4300 Network Security.
  * Copyright (C) 2022-2023 Aalto University
@@ -18,10 +18,10 @@ import android.widget.ImageButton;
 import android.widget.PopupMenu;
 import android.widget.TextView;
 
-import com.ticketapp.auth.app.main.TicketActivity;
-import com.ticketapp.auth.app.ulctools.Dump;
-import com.ticketapp.auth.app.ulctools.Reader;
-import com.ticketapp.auth.R;
+import com.ticketapp.wipe.app.main.TicketActivity;
+import com.ticketapp.wipe.app.ulctools.Dump;
+import com.ticketapp.wipe.app.ulctools.Reader;
+import com.ticketapp.wipe.R;
 
 public class DumpFragment extends Fragment {
 

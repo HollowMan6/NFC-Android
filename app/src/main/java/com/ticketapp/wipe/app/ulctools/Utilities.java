@@ -1,4 +1,4 @@
-package com.ticketapp.auth.app.ulctools;
+package com.ticketapp.wipe.app.ulctools;
 
 /**
  * Developed for Aalto University course CS-E4300 Network Security.

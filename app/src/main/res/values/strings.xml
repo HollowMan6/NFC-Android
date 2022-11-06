@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!--APP NAME-->
-    <string name="app_name">CS-E4300</string>
+    <string name="app_name">Reformat card</string>
 
     <!--TOOL POPUP ITEMS-->
     <string name="action_erase_all">Erase all</string>
