@@ -57,8 +57,10 @@ public class Ticket {
     private static final int SIZE_HMAC = 5;
     private static final int PAGE_COUNTER = 41;
     private static final int SIZE_COUNTER = 1;
-    private static final int PAGE_PROTECT = 42;
-    private static final int SIZE_PROTECT = 1;
+    private static final int PAGE_AUTH0 = 42;
+    private static final int SIZE_AUTH0 = 1;
+    private static final int PAGE_AUTH1 = 43;
+    private static final int SIZE_AUTH1 = 1;
     private static final int PAGE_PASSWD = 44;
     private static final int SIZE_PASSWD = 4;
     /**
@@ -150,6 +152,7 @@ public class Ticket {
         if (enCryptedKey.isEmpty()) {
             enCryptedKey = keyStorage.encrypt(key);
             if (enCryptedKey.isEmpty()) {
+                Utilities.log("Unable to encrypt the key!", true);
                 throw new IOException("Unable to encrypt the key!");
             }
             storageEditor.putString(enCryptedKeyAlias, enCryptedKey);
@@ -163,6 +166,7 @@ public class Ticket {
 
             // Something must be wrong if the stored key not equals to decrypted one from the Internet
             if (deCryptedKey.isEmpty() || (!key.isEmpty() && !deCryptedKey.equals(key))) {
+                Utilities.log("Unable to decrypt the key!", true);
                 throw new IOException("Unable to decrypt the key!");
             }
             Utilities.log("Key from storage", false);
@@ -609,10 +613,15 @@ public class Ticket {
         }
 
         /** Write data */
-        // Unprotect the user data memory
-        byte[] lockData = {48, 0, 0, 0};
-        if (!utils.writePages(lockData, 0, PAGE_PROTECT, SIZE_PROTECT)) {
-            Utilities.log("Error unprotected user data in issue()!", true);
+        // protect the user data memory from writing
+        byte[] auth0Data = {3, 0, 0, 0};
+        if (!utils.writePages(auth0Data, 0, PAGE_AUTH0, SIZE_AUTH0)) {
+            Utilities.log("Error protected user data in issue()!", true);
+            return false;
+        }
+        byte[] auth1Data = {1, 0, 0, 0};
+        if (!utils.writePages(auth1Data, 0, PAGE_AUTH1, SIZE_AUTH1)) {
+            Utilities.log("Error set only write protected in issue()!", true);
             return false;
         }
 
