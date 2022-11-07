@@ -39,22 +39,19 @@ public class Ticket {
     // Mark for ensuring atomic operations
     private static final int PAGE_TRANS_MARK = 6;
     private static final int SIZE_TRANS_MARK = 1;
-    private static final int PAGE_MAX_RIDE_1 = 7;
-    private static final int PAGE_MAX_RIDE_2 = 16;
-    private static final int SIZE_MAX_RIDE = 1;
+    private static final int PAGE_RIDE_1 = 7;
+    private static final int PAGE_RIDE_2 = 11;
+    private static final int SIZE_RIDE = 1;
     // Backup the counter for atomic write
-    private static final int PAGE_COUNTER_BK_1 = 8;
-    private static final int PAGE_COUNTER_BK_2 = 17;
-    private static final int SIZE_COUNTER_BK = 1;
-    private static final int PAGE_CHECK_TIME_1 = 9;
-    private static final int PAGE_CHECK_TIME_2 = 18;
+    private static final int PAGE_CHECK_TIME_1 = 8;
+    private static final int PAGE_CHECK_TIME_2 = 12;
     private static final int SIZE_CHECK_TIME = 1;
-    private static final int PAGE_EXP_TIME_1 = 10;
-    private static final int PAGE_EXP_TIME_2 = 19;
+    private static final int PAGE_EXP_TIME_1 = 9;
+    private static final int PAGE_EXP_TIME_2 = 13;
     private static final int SIZE_EXP_TIME = 1;
-    private static final int PAGE_HMAC_1 = 11;
-    private static final int PAGE_HMAC_2 = 20;
-    private static final int SIZE_HMAC = 5;
+    private static final int PAGE_HMAC_1 = 10;
+    private static final int PAGE_HMAC_2 = 14;
+    private static final int SIZE_HMAC = 1;
     private static final int PAGE_COUNTER = 41;
     private static final int SIZE_COUNTER = 1;
     private static final int PAGE_AUTH0 = 42;
@@ -69,10 +66,9 @@ public class Ticket {
     private static final int LOG_TYPE_ISSUE = 0;
     private static final int LOG_TYPE_TOPUP = 1;
     private static final int LOG_TYPE_USE = 2;
-    private static final int SIZE_LOG_TYPE = 1;
-    private static final int PAGE_LOGS = 25;
-    private static final int NUM_LOG = 5;
-    private static final int SIZE_ONE_LOG = SIZE_CHECK_TIME + SIZE_MAX_RIDE + SIZE_LOG_TYPE;
+    private static final int PAGE_LOGS = 15;
+    private static final int NUM_LOG = 3;
+    private static final int SIZE_ONE_LOG = SIZE_CHECK_TIME + SIZE_RIDE;
     private static final int PAGE_NEW_LOGS = PAGE_LOGS + SIZE_ONE_LOG;
     private static final int SIZE_LOGS = SIZE_ONE_LOG * NUM_LOG;
     private static final int SIZE_NEW_LOGS = SIZE_ONE_LOG * (NUM_LOG - 1);
@@ -97,7 +93,6 @@ public class Ticket {
     private static TicketMac macAlgorithm; // For computing HMAC over ticket data, as needed
     private static KeyStorage keyStorage;
     private static Utilities utils;
-    private static Commands ul;
     private static String infoToShow = "-"; // Use this to show messages
     private Boolean isValid = false;
     private int remainingUses = 0;
@@ -123,7 +118,7 @@ public class Ticket {
             infoToShow = "Failed to get the keys";
         }
 
-        ul = new Commands();
+        Commands ul = new Commands();
         utils = new Utilities(ul);
     }
 
@@ -147,7 +142,7 @@ public class Ticket {
         }
 
         String enCryptedKey = sharedPref.getString(enCryptedKeyAlias, "");
-        String deCryptedKey = "";
+        String deCryptedKey;
 
         if (enCryptedKey.isEmpty()) {
             enCryptedKey = keyStorage.encrypt(key);
@@ -181,11 +176,19 @@ public class Ticket {
         return new byte[]{(byte) (value >> 24), (byte) (value >> 16), (byte) (value >> 8), (byte) value};
     }
 
+    private byte[] twoToByteArray(int value1, int value2) {
+        return new byte[]{(byte) (value1 >> 8), (byte) value1, (byte) (value2 >> 8), (byte) value2};
+    }
+
     /**
      * Packing an array of 4 bytes to an int, big endian, clean code
      */
     private int fromByteArray(byte[] bytes) {
         return ((bytes[0] & 0xFF) << 24) | ((bytes[1] & 0xFF) << 16) | ((bytes[2] & 0xFF) << 8) | ((bytes[3] & 0xFF));
+    }
+
+    private int[] twoFromByteArray(byte[] bytes) {
+        return new int[]{((bytes[0] & 0xFF) << 8) | ((bytes[1] & 0xFF)), ((bytes[2] & 0xFF) << 8) | ((bytes[3] & 0xFF))};
     }
 
     /**
@@ -298,10 +301,36 @@ public class Ticket {
     }
 
     /**
+     * Unified method generator for reading ticket data of two integer
+     */
+    private int[] getTicketDataTwo(int block, int page1Kind, int page2Kind, int sizeKind) {
+        byte[] num = new byte[sizeKind * 4];
+        int[] value = {-1, -1};
+        int page = page1Kind;
+        if (block == 0) {
+            page = page2Kind;
+        }
+        boolean res = utils.readPages(page, sizeKind, num, 0);
+        if (res) {
+            value = twoFromByteArray(num);
+        }
+        return value;
+    }
+
+    /**
      * Unified method generator for writing ticket data
      */
     private boolean setTicketData(int num, int block, int page1Kind, int page2Kind, int sizeKind) {
         byte[] numBytes = toByteArray(num);
+        int page = page1Kind;
+        if (block == 0) {
+            page = page2Kind;
+        }
+        return utils.writePages(numBytes, 0, page, sizeKind);
+    }
+
+    private boolean setTicketData(int num1, int num2, int block, int page1Kind, int page2Kind, int sizeKind) {
+        byte[] numBytes = twoToByteArray(num1, num2);
         int page = page1Kind;
         if (block == 0) {
             page = page2Kind;
@@ -339,37 +368,47 @@ public class Ticket {
 
     private boolean setHMac(byte[] HMacData, int block) {
         byte[] hmac = macAlgorithm.generateMac(HMacData);
+        byte[] hmacShorted = new byte[SIZE_HMAC * 4];
+        System.arraycopy(hmac, 0, hmacShorted, 0, SIZE_HMAC * 4);
         int page = PAGE_HMAC_1;
         if (block == 0) {
             page = PAGE_HMAC_2;
         }
-        return utils.writePages(hmac, 0, page, SIZE_HMAC);
+        return utils.writePages(hmacShorted, 0, page, SIZE_HMAC);
     }
 
     private boolean addLog(int currentTime, int remainRide, int type) {
         byte[] log = new byte[SIZE_LOGS * 4];
-        byte[] otherLog = new byte[SIZE_NEW_LOGS * 4];
-        boolean res = utils.readPages(PAGE_NEW_LOGS, SIZE_NEW_LOGS, otherLog, 0);
+        boolean res = utils.readPages(PAGE_LOGS, SIZE_LOGS, log, 0);
         if (res) {
-            System.arraycopy(otherLog, 0, log, 0, SIZE_NEW_LOGS * 4);
+            int minIndex = 0;
+            int minTime = (int) (System.currentTimeMillis() / 1000);
+            for (int i = 0; i < NUM_LOG; i++) {
+                byte[] time = new byte[SIZE_CHECK_TIME * 4];
+                System.arraycopy(log, i * SIZE_ONE_LOG * 4, time, 0, SIZE_CHECK_TIME * 4);
+                int seconds = fromByteArray(time);
+                if (minTime > seconds) {
+                    minTime = seconds;
+                    minIndex = i;
+                }
+            }
             byte[] newLog = new byte[SIZE_ONE_LOG * 4];
             System.arraycopy(toByteArray(currentTime), 0, newLog, 0, SIZE_CHECK_TIME * 4);
-            System.arraycopy(toByteArray(remainRide), 0, newLog, SIZE_CHECK_TIME * 4, SIZE_MAX_RIDE * 4);
-            System.arraycopy(toByteArray(type), 0, newLog, (SIZE_CHECK_TIME + SIZE_MAX_RIDE) * 4, SIZE_LOG_TYPE * 4);
-            System.arraycopy(newLog, 0, log, SIZE_NEW_LOGS * 4, SIZE_ONE_LOG * 4);
-            return utils.writePages(log, 0, PAGE_LOGS, SIZE_LOGS);
+            System.arraycopy(twoToByteArray(remainRide, type), 0, newLog, SIZE_CHECK_TIME * 4, SIZE_RIDE * 4);
+            return utils.writePages(newLog, 0, PAGE_LOGS + minIndex * SIZE_ONE_LOG, SIZE_ONE_LOG);
         }
         return false;
     }
 
     private int[] readTicketData(int block) throws IOException {
-        int maxRide = getTicketData(block, PAGE_MAX_RIDE_1, PAGE_MAX_RIDE_2, SIZE_MAX_RIDE);
+        int[] value = getTicketDataTwo(block, PAGE_RIDE_1, PAGE_RIDE_2, SIZE_RIDE);
+        int maxRide = value[0];
         if (maxRide == -1) {
             Utilities.log("Error reading maxRide!", true);
             throw new IOException();
         }
 
-        int backupCount = getTicketData(block, PAGE_COUNTER_BK_1, PAGE_COUNTER_BK_2, SIZE_COUNTER_BK);
+        int backupCount = value[1];
         if (backupCount == -1) {
             Utilities.log("Error reading backupCount!", true);
             throw new IOException();
@@ -397,11 +436,6 @@ public class Ticket {
             return false;
         }
 
-        if (!setTicketData(maxRide, block, PAGE_MAX_RIDE_1, PAGE_MAX_RIDE_2, SIZE_MAX_RIDE)) {
-            Utilities.log("Error writing max ride!", true);
-            return false;
-        }
-
         if (!setTicketData(checkinTime, block, PAGE_CHECK_TIME_1, PAGE_CHECK_TIME_2, SIZE_CHECK_TIME)) {
             Utilities.log("Error writing check in time!", true);
             return false;
@@ -420,8 +454,8 @@ public class Ticket {
         }
 
         // Must be the last one before commit
-        if (!setTicketData(backupCount, block, PAGE_COUNTER_BK_1, PAGE_COUNTER_BK_2, SIZE_COUNTER_BK)) {
-            Utilities.log("Error writing counter backup!", true);
+        if (!setTicketData(maxRide, backupCount, block, PAGE_RIDE_1, PAGE_RIDE_2, SIZE_RIDE)) {
+            Utilities.log("Error writing max ride!", true);
             return false;
         }
 
@@ -440,6 +474,7 @@ public class Ticket {
 
         boolean res;
         boolean firstTime = false;
+        long timeCounter = System.currentTimeMillis();
 
         isValid = false;
         infoToShow = "Communication error!";
@@ -532,7 +567,10 @@ public class Ticket {
                 return false;
             }
 
-            boolean hmacResult = Arrays.equals(hmac, macAlgorithm.generateMac(HMacData));
+            byte[] hmacCalculated = macAlgorithm.generateMac(HMacData);
+            byte[] hmacShortedCalculated = new byte[SIZE_HMAC * 4];
+            System.arraycopy(hmacCalculated, 0, hmacShortedCalculated, 0, SIZE_HMAC * 4);
+            boolean hmacResult = Arrays.equals(hmac, hmacShortedCalculated);
             boolean needReissue = false;
             if (transactionMarker != 0 && !hmacResult) {
                 Utilities.log("Transaction marker is not 0 in issue()!", true);
@@ -553,7 +591,10 @@ public class Ticket {
                     return false;
                 }
 
-                if (Arrays.equals(hmacAnother, macAlgorithm.generateMac(HMacAnotherData))) {
+                byte[] hmacAnotherCalculated = macAlgorithm.generateMac(HMacAnotherData);
+                byte[] hmacAnotherShortedCalculated = new byte[SIZE_HMAC * 4];
+                System.arraycopy(hmacAnotherCalculated, 0, hmacAnotherShortedCalculated, 0, SIZE_HMAC * 4);
+                if (Arrays.equals(hmacAnother, hmacAnotherShortedCalculated)) {
                     Utilities.log("Recovering from another block", false);
                     maxRide = readAnotherData[0];
                     backupCount = readAnotherData[1];
@@ -638,10 +679,10 @@ public class Ticket {
             return false;
         }
 
-        infoToShow = "Ticket updated with " + uses + " more rides! Now " + remainingUses;
+        infoToShow = "Ticket updated with " + uses + " more rides! Now " + remainingUses + "\nCommunication Time: " + (System.currentTimeMillis() - timeCounter) + "ms";
         int actionType = LOG_TYPE_TOPUP;
         if (firstTime) {
-            infoToShow = "Ticket issued with " + remainingUses + " rides!";
+            infoToShow = "Ticket issued with " + remainingUses + " rides!" + "\nCommunication Time: " + (System.currentTimeMillis() - timeCounter) + "ms";
             actionType = LOG_TYPE_ISSUE;
         }
 
@@ -730,7 +771,10 @@ public class Ticket {
             return false;
         }
 
-        boolean hmacResult = Arrays.equals(hmac, macAlgorithm.generateMac(HMacData));
+        byte[] hmacCalculated = macAlgorithm.generateMac(HMacData);
+        byte[] hmacShortedCalculated = new byte[SIZE_HMAC * 4];
+        System.arraycopy(hmacCalculated, 0, hmacShortedCalculated, 0, SIZE_HMAC * 4);
+        boolean hmacResult = Arrays.equals(hmac, hmacShortedCalculated);
         if (transactionMarker != 0 && !hmacResult) {
             Utilities.log("Transaction marker is not 0 and data corrupted in use()!", true);
             /** check the other block, if the other block is valid, then copy the
@@ -750,7 +794,10 @@ public class Ticket {
                 return false;
             }
 
-            if (Arrays.equals(hmacAnother, macAlgorithm.generateMac(HMacAnotherData))) {
+            byte[] hmacAnotherCalculated = macAlgorithm.generateMac(HMacAnotherData);
+            byte[] hmacAnotherShortedCalculated = new byte[SIZE_HMAC * 4];
+            System.arraycopy(hmacAnotherCalculated, 0, hmacAnotherShortedCalculated, 0, SIZE_HMAC * 4);
+            if (Arrays.equals(hmacAnother, hmacAnotherShortedCalculated)) {
                 Utilities.log("Recovering from another block", false);
                 maxRide = readAnotherData[0];
                 backupCount = readAnotherData[1];

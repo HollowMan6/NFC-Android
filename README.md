@@ -25,24 +25,20 @@ but it should make use of the cloud connection when available.
 - 6 -> transaction marker
 
 #### 2 ticket blocks
-- 7 -> max ride number (counter limit)
-- 8 -> counter backup
-- 9 -> last check-in time
-- 10 -> expiration time
-- 11,12,13,14,15 -> hmac
+- 7 -> max ride number (counter limit), counter backup
+- 8 -> last check-in time
+- 9 -> expiration time
+- 10 -> hmac
 ---
-- 16 -> max ride number (counter limit)
-- 17 -> counter backup
-- 18 -> last check-in time
-- 19 -> expiration time
-- 20,21,22,23,24 -> hmac
+- 11 -> max ride number (counter limit), counter backup
+- 12 -> last check-in time
+- 13 -> expiration time
+- 14 -> hmac
 
 #### Logs block
-- 25,26,27 -> timestamp, remaining ride, type
-- 28,29,30 -> timestamp, remaining ride, type
-- 31,32,33 -> timestamp, remaining ride, type
-- 34,35,36 -> timestamp, remaining ride, type
-- 37,38,39 -> timestamp, remaining ride, type
+- 15,16 -> timestamp, remaining ride, type
+- 17,18 -> timestamp, remaining ride, type
+- 19,20 -> timestamp, remaining ride, type
 
 ### Write process that can ensure atomic operations
 1. transaction marker=1
