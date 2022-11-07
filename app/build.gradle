@@ -5,7 +5,7 @@ android {
 
     defaultConfig {
         applicationId "com.example.auth"
-        minSdkVersion 14
+        minSdkVersion 23
         targetSdkVersion 26
     }
 

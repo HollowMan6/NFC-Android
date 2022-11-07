@@ -1,5 +1,8 @@
 package com.ticketapp.auth.ticket;
 
+import android.content.Context;
+import android.content.SharedPreferences;
+
 import com.ticketapp.auth.R;
 import com.ticketapp.auth.app.main.TicketActivity;
 import com.ticketapp.auth.app.ulctools.Commands;
@@ -23,13 +26,7 @@ public class Ticket {
      * Default keys are stored in res/values/secrets.xml
      **/
     private static final byte[] defaultAuthenticationKey = TicketActivity.outer.getString(R.string.default_auth_key).getBytes();
-    private static final byte[] defaultHMACKey = TicketActivity.outer.getString(R.string.default_hmac_key).getBytes();
-
-    /**
-     * MUST diversify the keys.
-     */
-    private static final byte[] authenticationKey = TicketActivity.outer.getString(R.string.auth_key).getBytes(); // 16-byte key
-    private static final byte[] hmacKey = TicketActivity.outer.getString(R.string.hmac_key).getBytes(); // 16-byte key
+    private static final String secretAlias = TicketActivity.outer.getString(R.string.secret_alias);
     /**
      * Data Structure
      */
@@ -64,7 +61,6 @@ public class Ticket {
     private static final int SIZE_PROTECT = 1;
     private static final int PAGE_PASSWD = 44;
     private static final int SIZE_PASSWD = 4;
-
     /**
      * Logging
      */
@@ -91,9 +87,13 @@ public class Ticket {
     private static final int KEY_SIZE = 16;
     private static final String APP_TAG = "CSE4";
     private static final String VERSION = "v0.1";
-
+    private static final int KEY_TYPE_AUTH = 0;
+    private static final int KEY_TYPE_HMAC = 1;
+    public static SharedPreferences sharedPref = TicketActivity.outer.getSharedPreferences(secretAlias, Context.MODE_PRIVATE);
+    public static SharedPreferences.Editor storageEditor = sharedPref.edit();
     public static byte[] data = new byte[192];
     private static TicketMac macAlgorithm; // For computing HMAC over ticket data, as needed
+    private static KeyStorage keyStorage;
     private static Utilities utils;
     private static Commands ul;
     private static String infoToShow = "-"; // Use this to show messages
@@ -105,9 +105,21 @@ public class Ticket {
      * Create a new ticket
      */
     public Ticket() throws GeneralSecurityException {
+        try {
+            keyStorage = new KeyStorage(TicketActivity.outer.getString(R.string.secret_alias));
+        } catch (IOException e) {
+            Utilities.log("KeyStorage() initialized failed", true);
+            e.printStackTrace();
+        }
+
         // Set HMAC key for the ticket
         macAlgorithm = new TicketMac();
-        macAlgorithm.setKey(hmacKey);
+        try {
+            macAlgorithm.setKey(getKey(KEY_TYPE_HMAC));
+        } catch (IOException e) {
+            e.printStackTrace();
+            infoToShow = "Failed to get the keys";
+        }
 
         ul = new Commands();
         utils = new Utilities(ul);
@@ -120,17 +132,55 @@ public class Ticket {
         return infoToShow;
     }
 
+    private static byte[] getKey(int type) throws IOException, GeneralSecurityException {
+        // TODO: Fetch the keys from server
+        String authKey = "UqKrQZ!YM94@2hdJ";
+        String hmacKey = "QsmaRpTnSHx77lTX";
+
+        String key = authKey;
+        String enCryptedKeyAlias = TicketActivity.outer.getString(R.string.encrypted_auth_key_alias);
+        if (type == KEY_TYPE_HMAC) {
+            key = hmacKey;
+            enCryptedKeyAlias = TicketActivity.outer.getString(R.string.encrypted_hmac_key_alias);
+        }
+
+        String enCryptedKey = sharedPref.getString(enCryptedKeyAlias, "");
+        String deCryptedKey = "";
+
+        if (enCryptedKey.isEmpty()) {
+            enCryptedKey = keyStorage.encrypt(key);
+            if (enCryptedKey.isEmpty()) {
+                throw new IOException("Unable to encrypt the key!");
+            }
+            storageEditor.putString(enCryptedKeyAlias, enCryptedKey);
+            storageEditor.apply();
+
+            deCryptedKey = key;
+            Utilities.log("Key from fetch", false);
+        } else {
+            // Has stored the value, decrypt
+            deCryptedKey = keyStorage.decrypt(enCryptedKey);
+
+            // Something must be wrong if the stored key not equals to decrypted one from the Internet
+            if (deCryptedKey.isEmpty() || (!key.isEmpty() && !deCryptedKey.equals(key))) {
+                throw new IOException("Unable to decrypt the key!");
+            }
+            Utilities.log("Key from storage", false);
+        }
+        return deCryptedKey.getBytes();
+    }
+
     /**
      * https://stackoverflow.com/a/7619315
      */
-    byte[] toByteArray(int value) {
+    private byte[] toByteArray(int value) {
         return new byte[]{(byte) (value >> 24), (byte) (value >> 16), (byte) (value >> 8), (byte) value};
     }
 
     /**
      * Packing an array of 4 bytes to an int, big endian, clean code
      */
-    int fromByteArray(byte[] bytes) {
+    private int fromByteArray(byte[] bytes) {
         return ((bytes[0] & 0xFF) << 24) | ((bytes[1] & 0xFF) << 16) | ((bytes[2] & 0xFF) << 8) | ((bytes[3] & 0xFF));
     }
 
@@ -163,15 +213,16 @@ public class Ticket {
         return new byte[0];
     }
 
-    private byte[] getCardKey(byte[] serialNum) {
+    private byte[] getCardKey(byte[] serialNum) throws GeneralSecurityException {
         byte[] key = new byte[0];
-        PBEKeySpec spec = new PBEKeySpec(new String(authenticationKey).toCharArray(), serialNum, 10000, 512);
+
         try {
+            PBEKeySpec spec = new PBEKeySpec(new String(getKey(KEY_TYPE_AUTH)).toCharArray(), serialNum, 10000, 512);
             SecretKeyFactory skf = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
             byte[] hash = skf.generateSecret(spec).getEncoded();
             key = new byte[KEY_SIZE];
             System.arraycopy(hash, 0, key, 0, KEY_SIZE);
-        } catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
+        } catch (NoSuchAlgorithmException | InvalidKeySpecException | IOException e) {
             e.printStackTrace();
             Utilities.log("Error using PBKDF2WithHmacSHA1!", true);
         }
