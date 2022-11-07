@@ -33,6 +33,10 @@ public class Ticket {
     private static final int PAGE_SERIAL_NUM = 0;
     private static final int SIZE_SERIAL_NUM = 2;
     private static final int SIZE_DATA = 36;
+    private static final int PAGE_AUTH0 = 42;
+    private static final int SIZE_AUTH0 = 1;
+    private static final int PAGE_AUTH1 = 43;
+    private static final int SIZE_AUTH1 = 1;
     private static final int PAGE_PASSWD = 44;
     private static final int SIZE_PASSWD = 4;
     private static final int KEY_SIZE = 16;
@@ -147,6 +151,17 @@ public class Ticket {
             infoToShow = "Finished wiping card";
         } else {
             infoToShow = "Failed to write";
+        }
+
+        byte[] auth0Data = {48, 0, 0, 0};
+        if (!utils.writePages(auth0Data, 0, PAGE_AUTH0, SIZE_AUTH0)) {
+            Utilities.log("Error unprotected user data in issue()!", true);
+            return false;
+        }
+        byte[] auth1Data = {0, 0, 0, 0};
+        if (!utils.writePages(auth1Data, 0, PAGE_AUTH1, SIZE_AUTH1)) {
+            Utilities.log("Error set read-write protected in issue()!", true);
+            return false;
         }
 
         if (!utils.writePages(defaultAuthenticationKey, 0, PAGE_PASSWD, SIZE_PASSWD)) {
