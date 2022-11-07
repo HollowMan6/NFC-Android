@@ -658,7 +658,7 @@ public class Ticket {
      */
     public boolean use() throws GeneralSecurityException {
         boolean res;
-
+        long timeCounter = System.currentTimeMillis();
         infoToShow = "Communication error!";
 
         if (!checkHeader()) {
@@ -861,7 +861,7 @@ public class Ticket {
 
         SimpleDateFormat simpleDateFormat = new SimpleDateFormat("dd/MM/yyyy' 'HH:mm:ss");
         Timestamp timestamp = new Timestamp((long) expiryTime * 1000);
-        infoToShow = "Remaining ride: " + remainingUses + "\nExpiry time: " + simpleDateFormat.format(timestamp);
+        infoToShow = "Remaining ride: " + remainingUses + "\nExpiry time: " + simpleDateFormat.format(timestamp) + "\nCommunication Time: " + (System.currentTimeMillis() - timeCounter) + "ms";
         isValid = true;
         return true;
     }
