@@ -611,13 +611,13 @@ public class Ticket {
         }
 
         /** Write data */
-        // protect the user data memory from writing
-        byte[] auth0Data = {3, 0, 0, 0};
+        // protect the user data memory from reading and writing
+        byte[] auth0Data = {6, 0, 0, 0};
         if (!utils.writePages(auth0Data, 0, PAGE_AUTH0, SIZE_AUTH0)) {
             Utilities.log("Error protected user data in issue()!", true);
             return false;
         }
-        byte[] auth1Data = {1, 0, 0, 0};
+        byte[] auth1Data = {0, 0, 0, 0};
         if (!utils.writePages(auth1Data, 0, PAGE_AUTH1, SIZE_AUTH1)) {
             Utilities.log("Error set only write protected in issue()!", true);
             return false;
