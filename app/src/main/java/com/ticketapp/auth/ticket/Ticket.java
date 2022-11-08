@@ -36,21 +36,18 @@ public class Ticket {
     private static final int SIZE_APP_TAG = 1;
     private static final int PAGE_VERSION = 5;
     private static final int SIZE_VERSION = 1;
-    // Mark for ensuring atomic operations
-    private static final int PAGE_TRANS_MARK = 6;
-    private static final int SIZE_TRANS_MARK = 1;
-    private static final int PAGE_RIDE_1 = 7;
-    private static final int PAGE_RIDE_2 = 11;
+    private static final int PAGE_RIDE_1 = 6;
+    private static final int PAGE_RIDE_2 = 10;
     private static final int SIZE_RIDE = 1;
     // Backup the counter for atomic write
-    private static final int PAGE_CHECK_TIME_1 = 8;
-    private static final int PAGE_CHECK_TIME_2 = 12;
+    private static final int PAGE_CHECK_TIME_1 = 7;
+    private static final int PAGE_CHECK_TIME_2 = 11;
     private static final int SIZE_CHECK_TIME = 1;
-    private static final int PAGE_EXP_TIME_1 = 9;
-    private static final int PAGE_EXP_TIME_2 = 13;
+    private static final int PAGE_EXP_TIME_1 = 8;
+    private static final int PAGE_EXP_TIME_2 = 12;
     private static final int SIZE_EXP_TIME = 1;
-    private static final int PAGE_HMAC_1 = 10;
-    private static final int PAGE_HMAC_2 = 14;
+    private static final int PAGE_HMAC_1 = 9;
+    private static final int PAGE_HMAC_2 = 13;
     private static final int SIZE_HMAC = 1;
     private static final int PAGE_COUNTER = 41;
     private static final int SIZE_COUNTER = 1;
@@ -66,12 +63,10 @@ public class Ticket {
     private static final int LOG_TYPE_ISSUE = 0;
     private static final int LOG_TYPE_TOPUP = 1;
     private static final int LOG_TYPE_USE = 2;
-    private static final int PAGE_LOGS = 15;
     private static final int NUM_LOG = 3;
     private static final int SIZE_ONE_LOG = SIZE_CHECK_TIME + SIZE_RIDE;
-    private static final int PAGE_NEW_LOGS = PAGE_LOGS + SIZE_ONE_LOG;
     private static final int SIZE_LOGS = SIZE_ONE_LOG * NUM_LOG;
-    private static final int SIZE_NEW_LOGS = SIZE_ONE_LOG * (NUM_LOG - 1);
+    private static final int PAGE_LOGS = PAGE_COUNTER - 1 - SIZE_LOGS;
     /**
      * Settings
      */
@@ -270,20 +265,6 @@ public class Ticket {
         return utils.writePages(counterBytes, 0, PAGE_COUNTER, SIZE_COUNTER);
     }
 
-    private int getTransactionMarker() {
-        byte[] transactionMarker = new byte[SIZE_TRANS_MARK * 4];
-        boolean res = utils.readPages(PAGE_TRANS_MARK, SIZE_TRANS_MARK, transactionMarker, 0);
-        if (res) {
-            return fromByteArray(transactionMarker);
-        }
-        return -1;
-    }
-
-    private boolean setTransactionMarker(int num) {
-        byte[] numBytes = toByteArray(num);
-        return utils.writePages(numBytes, 0, PAGE_TRANS_MARK, SIZE_TRANS_MARK);
-    }
-
     /**
      * Unified method generator for reading ticket data
      */
@@ -377,27 +358,48 @@ public class Ticket {
         return utils.writePages(hmacShorted, 0, page, SIZE_HMAC);
     }
 
-    private boolean addLog(int currentTime, int remainRide, int type) {
-        byte[] log = new byte[SIZE_LOGS * 4];
-        boolean res = utils.readPages(PAGE_LOGS, SIZE_LOGS, log, 0);
-        if (res) {
-            int minIndex = 0;
-            int minTime = (int) (System.currentTimeMillis() / 1000);
-            for (int i = 0; i < NUM_LOG; i++) {
-                byte[] time = new byte[SIZE_CHECK_TIME * 4];
-                System.arraycopy(log, i * SIZE_ONE_LOG * 4, time, 0, SIZE_CHECK_TIME * 4);
-                int seconds = fromByteArray(time);
-                if (minTime > seconds) {
-                    minTime = seconds;
-                    minIndex = i;
-                }
-            }
-            byte[] newLog = new byte[SIZE_ONE_LOG * 4];
-            System.arraycopy(toByteArray(currentTime), 0, newLog, 0, SIZE_CHECK_TIME * 4);
-            System.arraycopy(twoToByteArray(remainRide, type), 0, newLog, SIZE_CHECK_TIME * 4, SIZE_RIDE * 4);
-            return utils.writePages(newLog, 0, PAGE_LOGS + minIndex * SIZE_ONE_LOG, SIZE_ONE_LOG);
+    private boolean checkHMac(byte[] hmac, byte[] HMacData) {
+        byte[] hmacCalculated = macAlgorithm.generateMac(HMacData);
+        byte[] hmacShortedCalculated = new byte[SIZE_HMAC * 4];
+        System.arraycopy(hmacCalculated, 0, hmacShortedCalculated, 0, SIZE_HMAC * 4);
+        return Arrays.equals(hmac, hmacShortedCalculated);
+    }
+
+    private boolean commonChecks(int cnt, int maxRide, int backupCount, int checkinTime, int expTime, byte[] hmac, byte[] HMacData) {
+        if (!checkHMac(hmac, HMacData)) {
+            Utilities.log("Corrupted Ticket! Bad HMAC!", false);
+            return false;
         }
-        return false;
+
+        if (cnt >= MAX_COUNTER) {
+            Utilities.log("Card reaches lifespan!", true);
+            return false;
+        }
+
+        // counter should always be equal or 1 greater than backup counter
+        // Or it is a corrupted card with suspicious data
+        if (cnt - backupCount > 1 || cnt - backupCount < 0) {
+            Utilities.log("Unreasonable backup counter!", true);
+            return false;
+        }
+
+        if (maxRide - cnt > MAX_RIDE_CARD) {
+            Utilities.log("Unreasonable rides available!", true);
+            return false;
+        }
+
+        if (checkinTime - (int) (System.currentTimeMillis() / 1000) > 0) {
+            Utilities.log("Unreasonable checkin time!", true);
+            return false;
+        }
+
+        // TODO: Change the expiry time to be in days
+        if (expTime - (int) (System.currentTimeMillis() / 1000) > MAX_EXPIRY * 60) {
+            Utilities.log("Unreasonable expiryTime!", true);
+            return false;
+        }
+
+        return true;
     }
 
     private int[] readTicketData(int block) throws IOException {
@@ -429,10 +431,8 @@ public class Ticket {
     }
 
     private boolean writeTicketData(int block, int maxRide, int backupCount, int checkinTime, int expTime, byte[] serialNum) {
-        if (setTransactionMarker(1)) {
-            Utilities.log("Transaction marker set to 1", false);
-        } else {
-            Utilities.log("Error setting transaction marker to 0", true);
+        if (!setTicketData(maxRide, backupCount, block, PAGE_RIDE_1, PAGE_RIDE_2, SIZE_RIDE)) {
+            Utilities.log("Error writing max ride!", true);
             return false;
         }
 
@@ -453,13 +453,31 @@ public class Ticket {
             return false;
         }
 
-        // Must be the last one before commit
-        if (!setTicketData(maxRide, backupCount, block, PAGE_RIDE_1, PAGE_RIDE_2, SIZE_RIDE)) {
-            Utilities.log("Error writing max ride!", true);
-            return false;
-        }
-
         return true;
+    }
+
+
+    private boolean addLog(int currentTime, int remainRide, int type) {
+        byte[] log = new byte[SIZE_LOGS * 4];
+        boolean res = utils.readPages(PAGE_LOGS, SIZE_LOGS, log, 0);
+        if (res) {
+            int minIndex = 0;
+            int minTime = (int) (System.currentTimeMillis() / 1000);
+            for (int i = 0; i < NUM_LOG; i++) {
+                byte[] time = new byte[SIZE_CHECK_TIME * 4];
+                System.arraycopy(log, i * SIZE_ONE_LOG * 4, time, 0, SIZE_CHECK_TIME * 4);
+                int seconds = fromByteArray(time);
+                if (minTime > seconds) {
+                    minTime = seconds;
+                    minIndex = i;
+                }
+            }
+            byte[] newLog = new byte[SIZE_ONE_LOG * 4];
+            System.arraycopy(toByteArray(currentTime), 0, newLog, 0, SIZE_CHECK_TIME * 4);
+            System.arraycopy(twoToByteArray(remainRide, type), 0, newLog, SIZE_CHECK_TIME * 4, SIZE_RIDE * 4);
+            return utils.writePages(newLog, 0, PAGE_LOGS + minIndex * SIZE_ONE_LOG, SIZE_ONE_LOG);
+        }
+        return false;
     }
 
     /**
@@ -526,13 +544,7 @@ public class Ticket {
         if (cnt == -1) {
             Utilities.log("Error reading counter in issue()!", true);
             return false;
-        } else if (cnt >= MAX_COUNTER) {
-            Utilities.log("Card reaches lifespan!", true);
-            infoToShow = "Card reaches lifespan!\ncounter" + cnt;
-            return false;
         }
-
-        Utilities.log("Counter: " + cnt, false);
 
         int block = cnt % 2;
         int maxRide = uses + cnt;
@@ -561,81 +573,9 @@ public class Ticket {
                 return false;
             }
 
-            int transactionMarker = getTransactionMarker();
-            if (transactionMarker == -1) {
-                Utilities.log("Error reading transaction marker in issue()", true);
+            if (!commonChecks(cnt, maxRide, backupCount, checkinTime, expiryTime, hmac, HMacData)) {
+                infoToShow = "Corrupted Ticket!";
                 return false;
-            }
-
-            byte[] hmacCalculated = macAlgorithm.generateMac(HMacData);
-            byte[] hmacShortedCalculated = new byte[SIZE_HMAC * 4];
-            System.arraycopy(hmacCalculated, 0, hmacShortedCalculated, 0, SIZE_HMAC * 4);
-            boolean hmacResult = Arrays.equals(hmac, hmacShortedCalculated);
-            boolean needReissue = false;
-            if (transactionMarker != 0 && !hmacResult) {
-                Utilities.log("Transaction marker is not 0 in issue()!", true);
-                /** check the other block, if the other block is valid, then copy the
-                 *  data from the other block to the current block.
-                 *  If both blocks are not valid, then consider it as a new ticket.
-                 */
-                int[] readAnotherData;
-                try {
-                    readAnotherData = readTicketData((block + 1) % 2);
-                } catch (IOException e) {
-                    return false;
-                }
-                byte[] HMacAnotherData = organizeHMacComputeData(serialNum, readAnotherData[0], readAnotherData[1], readAnotherData[2], readAnotherData[3]);
-                byte[] hmacAnother = getHMac((block + 1) % 2);
-                if (hmacAnother.length == 0) {
-                    Utilities.log("Error reading HMac when recovering in issue()!", true);
-                    return false;
-                }
-
-                byte[] hmacAnotherCalculated = macAlgorithm.generateMac(HMacAnotherData);
-                byte[] hmacAnotherShortedCalculated = new byte[SIZE_HMAC * 4];
-                System.arraycopy(hmacAnotherCalculated, 0, hmacAnotherShortedCalculated, 0, SIZE_HMAC * 4);
-                if (Arrays.equals(hmacAnother, hmacAnotherShortedCalculated)) {
-                    Utilities.log("Recovering from another block", false);
-                    maxRide = readAnotherData[0];
-                    backupCount = readAnotherData[1];
-                    checkinTime = readAnotherData[2];
-                    expiryTime = readAnotherData[3];
-                    // Check if the counter has been updated or not
-                    if (cnt == backupCount + 1) {
-                        Utilities.log("Counter has been updated in last broken write!", false);
-                        maxRide += 1;
-                    }
-                    backupCount = cnt;
-                    if (writeTicketData(block, maxRide, backupCount, checkinTime, expiryTime, serialNum)) {
-                        Utilities.log("Recover successfully", false);
-                        if (setTransactionMarker(0)) {
-                            Utilities.log("Transaction marker set to 0", false);
-                        } else {
-                            Utilities.log("Error setting transaction marker to 0", true);
-                            return false;
-                        }
-                    } else {
-                        Utilities.log("Recover failed", false);
-                        return false;
-                    }
-                } else {
-                    needReissue = true;
-                    Utilities.log("Both blocks are not valid, consider it as a new ticket", false);
-                }
-            } else if (transactionMarker != 0 && cnt == backupCount + 1) {
-                Utilities.log("Counter has been updated in last broken write!", false);
-                maxRide += 1;
-            } else if (!hmacResult) {
-                Utilities.log("HMac is not valid in issue()!", true);
-                needReissue = true;
-            }
-
-            if (needReissue) {
-                firstTime = true;
-                maxRide = cnt;
-                backupCount = cnt;
-                checkinTime = 0;
-                expiryTime = 0;
             }
 
             if (expiryTime != 0 && expiryTime < (int) (System.currentTimeMillis() / 1000)) {
@@ -672,25 +612,19 @@ public class Ticket {
             return false;
         }
 
-        if (setTransactionMarker(0)) {
-            Utilities.log("Transaction marker set to 0", false);
-        } else {
-            Utilities.log("Error setting transaction marker to 0", true);
-            return false;
-        }
-
-        infoToShow = "Ticket updated with " + uses + " more rides! Now " + remainingUses + "\nCommunication Time: " + (System.currentTimeMillis() - timeCounter) + "ms";
+        infoToShow = "Ticket updated with " + uses + " more rides! Now " + remainingUses;
         int actionType = LOG_TYPE_TOPUP;
         if (firstTime) {
-            infoToShow = "Ticket issued with " + remainingUses + " rides!" + "\nCommunication Time: " + (System.currentTimeMillis() - timeCounter) + "ms";
+            infoToShow = "Ticket issued with " + remainingUses + " rides!";
             actionType = LOG_TYPE_ISSUE;
         }
 
         if (!addLog((int) (System.currentTimeMillis() / 1000), remainingUses, actionType)) {
-            Utilities.log("Error writing counter in issue()!", true);
+            Utilities.log("Error writing log in issue()!", true);
             // Forget about the log if it fails
         }
         isValid = true;
+        infoToShow += "\nCommunication Time: " + (System.currentTimeMillis() - timeCounter) + "ms";
         return true;
     }
 
@@ -718,7 +652,6 @@ public class Ticket {
         byte[] cardKey = getCardKey(serialNum);
         if (cardKey.length == 0) {
             Utilities.log("cardKey length is 0 in use()", true);
-            infoToShow = "Failed to get card key";
             return false;
         }
 
@@ -733,11 +666,6 @@ public class Ticket {
         int cnt = getCounter();
         if (cnt == -1) {
             Utilities.log("Error reading counter in use()!", true);
-            return false;
-        } else if (cnt >= MAX_COUNTER) {
-
-            Utilities.log("Card reaches lifespan!", true);
-            infoToShow = "Card reaches lifespan!\ncounter" + cnt;
             return false;
         }
 
@@ -765,97 +693,12 @@ public class Ticket {
             return false;
         }
 
-        int transactionMarker = getTransactionMarker();
-        if (transactionMarker == -1) {
-            Utilities.log("Error reading transaction marker in use()", true);
-            return false;
-        }
-
-        byte[] hmacCalculated = macAlgorithm.generateMac(HMacData);
-        byte[] hmacShortedCalculated = new byte[SIZE_HMAC * 4];
-        System.arraycopy(hmacCalculated, 0, hmacShortedCalculated, 0, SIZE_HMAC * 4);
-        boolean hmacResult = Arrays.equals(hmac, hmacShortedCalculated);
-        if (transactionMarker != 0 && !hmacResult) {
-            Utilities.log("Transaction marker is not 0 and data corrupted in use()!", true);
-            /** check the other block, if the other block is valid, then copy the
-             *  data from the other block to the current block.
-             *  If both blocks are not valid, then block the card.
-             */
-            int[] readAnotherData;
-            try {
-                readAnotherData = readTicketData((block + 1) % 2);
-            } catch (IOException e) {
-                return false;
-            }
-            byte[] HMacAnotherData = organizeHMacComputeData(serialNum, readAnotherData[0], readAnotherData[1], readAnotherData[2], readAnotherData[3]);
-            byte[] hmacAnother = getHMac((block + 1) % 2);
-            if (hmacAnother.length == 0) {
-                Utilities.log("Error reading HMac when recovering in use()!", true);
-                return false;
-            }
-
-            byte[] hmacAnotherCalculated = macAlgorithm.generateMac(HMacAnotherData);
-            byte[] hmacAnotherShortedCalculated = new byte[SIZE_HMAC * 4];
-            System.arraycopy(hmacAnotherCalculated, 0, hmacAnotherShortedCalculated, 0, SIZE_HMAC * 4);
-            if (Arrays.equals(hmacAnother, hmacAnotherShortedCalculated)) {
-                Utilities.log("Recovering from another block", false);
-                maxRide = readAnotherData[0];
-                backupCount = readAnotherData[1];
-                checkinTime = readAnotherData[2];
-                expiryTime = readAnotherData[3];
-                // Check if the counter has been updated or not
-                if (cnt == backupCount + 1) {
-                    Utilities.log("Counter has been updated in last broken write!", false);
-                    maxRide += 1;
-                }
-                backupCount = cnt;
-                if (writeTicketData(block, maxRide, backupCount, checkinTime, expiryTime, serialNum)) {
-                    Utilities.log("Recover successfully", false);
-                    if (setTransactionMarker(0)) {
-                        Utilities.log("Transaction marker set to 0", false);
-                    } else {
-                        Utilities.log("Error setting transaction marker to 0", true);
-                        return false;
-                    }
-                } else {
-                    Utilities.log("Recover failed", false);
-                    return false;
-                }
-            } else {
-                Utilities.log("Both blocks are not valid!", false);
-                infoToShow = "Corrupted Ticket!";
-                return false;
-                // throw new GeneralSecurityException("Corrupted Ticket!");
-            }
-        } else if (!hmacResult) {
-            Utilities.log("HMac is not valid in use()!", true);
+        if (!commonChecks(cnt, maxRide, backupCount, checkinTime, expiryTime, hmac, HMacData)) {
             infoToShow = "Corrupted Ticket!";
             return false;
         }
 
-        // counter should always be equal or 1 greater than backup counter
-        // Or it is a corrupted card with suspicious data
-        if (cnt - backupCount > 1 || cnt - backupCount < 0) {
-            Utilities.log("Unreasonable backup counter!", true);
-            infoToShow = "Corrupted Ticket!";
-            return false;
-            // throw new GeneralSecurityException("Unreasonable backup counter!");
-        }
-
-        if (maxRide - cnt > MAX_RIDE_CARD) {
-            Utilities.log("Unreasonable rides available!", true);
-            infoToShow = "Unreasonable available rides!\nRemaining: " + (maxRide - cnt);
-            return false;
-            // throw new GeneralSecurityException("Unreasonable rides available!");
-        }
-
-        // TODO: Change the expiry time to be in days
-        if (expiryTime - (int) (System.currentTimeMillis() / 1000) > MAX_EXPIRY * 60) {
-            Utilities.log("Unreasonable expiryTime!", true);
-            infoToShow = "Unreasonable expiryTime!";
-            return false;
-            // throw new GeneralSecurityException("Unreasonable expiryTime!");
-        } else if (expiryTime != 0 && System.currentTimeMillis() / 1000 > expiryTime) {
+        if (expiryTime != 0 && System.currentTimeMillis() / 1000 > expiryTime) {
             Utilities.log("Ticket expired in use()!", true);
             infoToShow = "Ticket expired!";
             return false;
@@ -871,7 +714,6 @@ public class Ticket {
             Utilities.log("Check in time is less than the delay in use()!", true);
             infoToShow = "Ticket used too fast!";
             return false;
-            // throw new GeneralSecurityException("Ticket used too fast!");
         }
 
         /** Write new ticket */
@@ -894,15 +736,8 @@ public class Ticket {
             return false;
         }
 
-        if (setTransactionMarker(0)) {
-            Utilities.log("Transaction marker set to 0", false);
-        } else {
-            Utilities.log("Error setting transaction marker to 0", true);
-            return false;
-        }
-
         if (!addLog(checkinTime, remainingUses, LOG_TYPE_USE)) {
-            Utilities.log("Error writing counter in use()!", true);
+            Utilities.log("Error writing log in use()!", true);
             // Forget about the log if it fails
         }
 
