@@ -134,14 +134,23 @@ public class Ticket {
         }
 
         String enCryptedKeyExpTime = sharedPref.getString(enCryptedKeyExpTimeAlias, "");
-        if (enCryptedKeyExpTime.isEmpty() || Long.parseLong(keyStorage.decrypt(enCryptedKeyExpTime)) < System.currentTimeMillis()) {
+        long keyExpTime = 0;
+        if (!enCryptedKeyExpTime.isEmpty()) {
+            SimpleDateFormat simpleDateFormat = new SimpleDateFormat("dd/MM/yyyy' 'HH:mm:ss");
+            keyExpTime = Long.parseLong(keyStorage.decrypt(enCryptedKeyExpTime));
+            Timestamp timestamp = new Timestamp(keyExpTime);
+            Utilities.log("Key expired time: " + simpleDateFormat.format(timestamp), false);
+        }
+
+        if (enCryptedKeyExpTime.isEmpty() || keyExpTime < System.currentTimeMillis()) {
             // TODO: Fetch the keys from server
             key = "UqKrQZ!YM94@2hdJ";
             if (type == KEY_TYPE_HMAC) {
                 key = "QsmaRpTnSHx77lTX";
             }
-            storageEditor.putString(enCryptedKeyExpTimeAlias, keyStorage.encrypt(Long.toString(System.currentTimeMillis()) + 60 * 1000));
+            storageEditor.putString(enCryptedKeyExpTimeAlias, keyStorage.encrypt(Long.toString(System.currentTimeMillis() + 60 * 1000)));
             storageEditor.apply();
+            Utilities.log("Key from fetch as expired", false);
         }
 
         String enCryptedKey = sharedPref.getString(enCryptedKeyAlias, "");
