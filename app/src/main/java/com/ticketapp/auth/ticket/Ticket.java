@@ -125,15 +125,23 @@ public class Ticket {
     }
 
     private static byte[] getKey(int type) throws IOException, GeneralSecurityException {
-        // TODO: Fetch the keys from server
-        String authKey = "UqKrQZ!YM94@2hdJ";
-        String hmacKey = "QsmaRpTnSHx77lTX";
-
-        String key = authKey;
+        String key = "";
         String enCryptedKeyAlias = TicketActivity.outer.getString(R.string.encrypted_auth_key_alias);
+        String enCryptedKeyExpTimeAlias = TicketActivity.outer.getString(R.string.encrypted_auth_key_expiration_time);
         if (type == KEY_TYPE_HMAC) {
-            key = hmacKey;
             enCryptedKeyAlias = TicketActivity.outer.getString(R.string.encrypted_hmac_key_alias);
+            enCryptedKeyExpTimeAlias = TicketActivity.outer.getString(R.string.encrypted_hmac_key_expiration_time);
+        }
+
+        String enCryptedKeyExpTime = sharedPref.getString(enCryptedKeyExpTimeAlias, "");
+        if (enCryptedKeyExpTime.isEmpty() || Long.parseLong(keyStorage.decrypt(enCryptedKeyExpTime)) < System.currentTimeMillis()) {
+            // TODO: Fetch the keys from server
+            key = "UqKrQZ!YM94@2hdJ";
+            if (type == KEY_TYPE_HMAC) {
+                key = "QsmaRpTnSHx77lTX";
+            }
+            storageEditor.putString(enCryptedKeyExpTimeAlias, keyStorage.encrypt(Long.toString(System.currentTimeMillis()) + 60 * 1000));
+            storageEditor.apply();
         }
 
         String enCryptedKey = sharedPref.getString(enCryptedKeyAlias, "");
