@@ -21,12 +21,12 @@
 - 5 -> version
 
 #### 2 ticket blocks
-- 6 -> max ride number (counter limit), counter backup
+- 6 -> max ride number (counter limit), expected counter
 - 7 -> last check-in time
 - 8 -> expiration time
 - 9 -> hmac
 ---
-- 10 -> max ride number (counter limit), counter backup
+- 10 -> max ride number (counter limit), expected counter
 - 11 -> last check-in time
 - 12 -> expiration time
 - 13 -> hmac

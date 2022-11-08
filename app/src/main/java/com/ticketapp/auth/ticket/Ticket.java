@@ -39,7 +39,6 @@ public class Ticket {
     private static final int PAGE_RIDE_1 = 6;
     private static final int PAGE_RIDE_2 = 10;
     private static final int SIZE_RIDE = 1;
-    // Backup the counter for atomic write
     private static final int PAGE_CHECK_TIME_1 = 7;
     private static final int PAGE_CHECK_TIME_2 = 11;
     private static final int SIZE_CHECK_TIME = 1;
@@ -336,12 +335,12 @@ public class Ticket {
         return utils.writePages(numBytes, 0, page, sizeKind);
     }
 
-    private byte[] organizeHMacComputeData(byte[] serialNum, int maxRide, int backupCounter, int checkinTime, int expTime) {
+    private byte[] organizeHMacComputeData(byte[] serialNum, int maxRide, int cnt, int checkinTime, int expTime) {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         try {
             outputStream.write(serialNum);
             outputStream.write(maxRide);
-            outputStream.write(backupCounter);
+            outputStream.write(cnt);
             outputStream.write(checkinTime);
             outputStream.write(expTime);
         } catch (IOException e) {
@@ -382,7 +381,7 @@ public class Ticket {
         return Arrays.equals(hmac, hmacShortedCalculated);
     }
 
-    private boolean commonChecks(int cnt, int maxRide, int backupCount, int checkinTime, int expTime, byte[] hmac, byte[] HMacData) {
+    private boolean commonChecks(int cnt, int maxRide, int expectedCount, int checkinTime, int expTime, byte[] hmac, byte[] HMacData) {
         if (!checkHMac(hmac, HMacData)) {
             Utilities.log("Corrupted Ticket! Bad HMAC!", false);
             return false;
@@ -393,10 +392,10 @@ public class Ticket {
             return false;
         }
 
-        // counter should always be equal or 1 greater than backup counter
+        // counter should always be equal to the expected counter
         // Or it is a corrupted card with suspicious data
-        if (cnt - backupCount > 1 || cnt - backupCount < 0) {
-            Utilities.log("Unreasonable backup counter!", true);
+        if (cnt != expectedCount) {
+            Utilities.log("Unreasonable expected counter!", true);
             return false;
         }
 
@@ -427,9 +426,9 @@ public class Ticket {
             throw new IOException();
         }
 
-        int backupCount = value[1];
-        if (backupCount == -1) {
-            Utilities.log("Error reading backupCount!", true);
+        int expectedCount = value[1];
+        if (expectedCount == -1) {
+            Utilities.log("Error reading expectedCount!", true);
             throw new IOException();
         }
 
@@ -444,11 +443,11 @@ public class Ticket {
             Utilities.log("Error reading expiry time!", true);
             throw new IOException();
         }
-        return new int[]{maxRide, backupCount, checkinTime, expTime};
+        return new int[]{maxRide, expectedCount, checkinTime, expTime};
     }
 
-    private boolean writeTicketData(int block, int maxRide, int backupCount, int checkinTime, int expTime, byte[] serialNum) {
-        if (!setTicketData(maxRide, backupCount, block, PAGE_RIDE_1, PAGE_RIDE_2, SIZE_RIDE)) {
+    private boolean writeTicketData(int block, int maxRide, int expectedCount, int checkinTime, int expTime, byte[] serialNum) {
+        if (!setTicketData(maxRide, expectedCount, block, PAGE_RIDE_1, PAGE_RIDE_2, SIZE_RIDE)) {
             Utilities.log("Error writing max ride!", true);
             return false;
         }
@@ -463,7 +462,7 @@ public class Ticket {
             return false;
         }
 
-        byte[] writeData = organizeHMacComputeData(serialNum, maxRide, backupCount, checkinTime, expiryTime);
+        byte[] writeData = organizeHMacComputeData(serialNum, maxRide, expectedCount, checkinTime, expiryTime);
 
         if (!setHMac(writeData, block)) {
             Utilities.log("Error writing HMAC!", true);
@@ -543,16 +542,16 @@ public class Ticket {
         } else {
             Utilities.log("Adding more rides to the card", false);
 
-            if (!checkHeader()) {
-                Utilities.log("Header is not valid in use()!", true);
-                infoToShow = "Card not recognizable or communication error!";
-                return false;
-            }
-
             res = utils.authenticate(cardKey);
             if (!res) {
                 Utilities.log("Authentication failed in issue()", true);
                 infoToShow = "Authentication failed";
+                return false;
+            }
+
+            if (!checkHeader()) {
+                Utilities.log("Header is not valid in use()!", true);
+                infoToShow = "Card not recognizable or communication error!";
                 return false;
             }
         }
@@ -566,7 +565,7 @@ public class Ticket {
         int block = cnt % 2;
         int maxRide = uses + cnt;
         remainingUses = uses;
-        int backupCount = cnt;
+        int expectedCount = cnt;
         int checkinTime = 0;
 
         /** Read data if not first time */
@@ -579,18 +578,18 @@ public class Ticket {
             }
 
             maxRide = readData[0];
-            backupCount = readData[1];
+            expectedCount = readData[1];
             checkinTime = readData[2];
             expiryTime = readData[3];
 
-            byte[] HMacData = organizeHMacComputeData(serialNum, maxRide, backupCount, checkinTime, expiryTime);
+            byte[] HMacData = organizeHMacComputeData(serialNum, maxRide, cnt, checkinTime, expiryTime);
             byte[] hmac = getHMac(block);
             if (hmac.length == 0) {
                 Utilities.log("Error reading HMac in issue()!", true);
                 return false;
             }
 
-            if (!commonChecks(cnt, maxRide, backupCount, checkinTime, expiryTime, hmac, HMacData)) {
+            if (!commonChecks(cnt, maxRide, expectedCount, checkinTime, expiryTime, hmac, HMacData)) {
                 infoToShow = "Corrupted Ticket!";
                 return false;
             }
@@ -612,7 +611,7 @@ public class Ticket {
 
         /** Write data */
         // protect the user data memory from reading and writing
-        byte[] auth0Data = {6, 0, 0, 0};
+        byte[] auth0Data = {3, 0, 0, 0};
         if (!utils.writePages(auth0Data, 0, PAGE_AUTH0, SIZE_AUTH0)) {
             Utilities.log("Error protected user data in issue()!", true);
             return false;
@@ -625,7 +624,7 @@ public class Ticket {
 
         expiryTime = 0;
 
-        if (!writeTicketData(block, maxRide, backupCount, checkinTime, expiryTime, serialNum)) {
+        if (!writeTicketData(block, maxRide, expectedCount, checkinTime, expiryTime, serialNum)) {
             return false;
         }
 
@@ -653,12 +652,6 @@ public class Ticket {
         long timeCounter = System.currentTimeMillis();
         infoToShow = "Communication error!";
 
-        if (!checkHeader()) {
-            Utilities.log("Header is not valid in use()!", true);
-            infoToShow = "Card not recognizable or communication error!";
-            return false;
-        }
-
         byte[] serialNum = getSerialNum();
         if (serialNum.length == 0) {
             Utilities.log("Error reading serial number in use()!", true);
@@ -677,6 +670,12 @@ public class Ticket {
         if (!res) {
             Utilities.log("Authentication failed in use()", true);
             infoToShow = "Authentication failed";
+            return false;
+        }
+
+        if (!checkHeader()) {
+            Utilities.log("Header is not valid in use()!", true);
+            infoToShow = "Card not recognizable or communication error!";
             return false;
         }
 
@@ -699,18 +698,18 @@ public class Ticket {
         }
 
         int maxRide = readData[0];
-        int backupCount = readData[1];
+        int expectedCount = readData[1];
         int checkinTime = readData[2];
         expiryTime = readData[3];
 
-        byte[] HMacData = organizeHMacComputeData(serialNum, maxRide, backupCount, checkinTime, expiryTime);
+        byte[] HMacData = organizeHMacComputeData(serialNum, maxRide, cnt, checkinTime, expiryTime);
         byte[] hmac = getHMac(block);
         if (hmac.length == 0) {
             Utilities.log("Error reading HMac in use()!", true);
             return false;
         }
 
-        if (!commonChecks(cnt, maxRide, backupCount, checkinTime, expiryTime, hmac, HMacData)) {
+        if (!commonChecks(cnt, maxRide, expectedCount, checkinTime, expiryTime, hmac, HMacData)) {
             infoToShow = "Corrupted Ticket!";
             return false;
         }
@@ -735,7 +734,7 @@ public class Ticket {
 
         /** Write new ticket */
         block = (block + 1) % 2;
-        backupCount = cnt;
+        expectedCount = cnt + 1;
         checkinTime = (int) (System.currentTimeMillis() / 1000);
         if (expiryTime == 0) {
             // TODO: Change the expiry time to be in days
@@ -743,7 +742,7 @@ public class Ticket {
         }
         remainingUses = maxRide - cnt - 1;
 
-        if (!writeTicketData(block, maxRide, backupCount, checkinTime, expiryTime, serialNum)) {
+        if (!writeTicketData(block, maxRide, expectedCount, checkinTime, expiryTime, serialNum)) {
             return false;
         }
 
