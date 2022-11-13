@@ -42,7 +42,8 @@ public class Ticket {
      **/
     private static final byte[] defaultAuthenticationKey = TicketActivity.outer.getString(R.string.default_auth_key).getBytes();
     private static final String secretAlias = TicketActivity.outer.getString(R.string.secret_alias);
-    private static final String HOST = "https://foo.bar/";
+    private static final String HOST = "http://192.168.2.7:7777/";
+    private static final String PASSWORD = "l54G*b,_Qtm85qo/Js&ec809@sZ2A$";
     /**
      * Data Structure
      */
@@ -126,7 +127,7 @@ public class Ticket {
         // Set HMAC key for the ticket
         macAlgorithm = new TicketMac();
         try {
-            macAlgorithm.setKey(getKey(KEY_TYPE_HMAC));
+            macAlgorithm.setKey(getKey(new byte[0], KEY_TYPE_HMAC));
         } catch (IOException e) {
             e.printStackTrace();
             infoToShow = "Failed to get the keys";
@@ -142,7 +143,7 @@ public class Ticket {
         return infoToShow;
     }
 
-    private static byte[] getKey(int type) throws IOException, GeneralSecurityException {
+    private static byte[] getKey(byte[] serialNum, int type) throws IOException, GeneralSecurityException {
         String key = "";
         String enCryptedKeyAlias = TicketActivity.outer.getString(R.string.encrypted_auth_key_alias);
         String enCryptedKeyExpTimeAlias = TicketActivity.outer.getString(R.string.encrypted_auth_key_expiration_time);
@@ -161,24 +162,27 @@ public class Ticket {
         }
 
         if (enCryptedKeyExpTime.isEmpty() || keyExpTime < System.currentTimeMillis()) {
-            // TODO: Fetch the keys from cloud
+            // Fetch the keys from cloud
             HTTPCallback cb = new HTTPCallback();
-            String url = HOST + "keyMaster";
+            String url = HOST + "?key=master";
             if (type == KEY_TYPE_HMAC) {
-                url = HOST + "keyHMac";
+                url = HOST + "?key=hmac";
             }
-//            makeRequest(url, cb);
+            try {
+                JSONObject jsonData = new JSONObject();
+                jsonData.put("password", PASSWORD);
+                makePost(url, jsonData.toString(), cb);
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+
             // Allow maximum delay of 1 second
             Long delayTime = System.currentTimeMillis() + 1000;
-//            // Wait to be available
-//            while (!cb.completed && System.currentTimeMillis() < delayTime) {}
-//            if(cb.completed && !cb.failed) {
-//                key = cb.responseStr;
-//            }
-            // TODO: Remove the secrets
-            key = "UqKrQZ!YM94@2hdJ";
-            if (type == KEY_TYPE_HMAC) {
-                key = "QsmaRpTnSHx77lTX";
+            // Wait to be available
+            while (!cb.completed && System.currentTimeMillis() < delayTime) {
+            }
+            if (cb.completed && !cb.failed) {
+                key = cb.responseStr;
             }
 
             if (!key.isEmpty()) {
@@ -210,7 +214,7 @@ public class Ticket {
             if (deCryptedKey.isEmpty() || (!key.isEmpty() && !deCryptedKey.equals(key))) {
                 Utilities.log("Unable to decrypt the key!", true);
                 // Cache it, will eventually report to the cloud later
-                cachedLogs += ((int) System.currentTimeMillis() / 1000) + ",0," + LOG_TYPE_MALICIOUS + "\n";
+                cachedLogs += Base64.encodeToString(serialNum, Base64.DEFAULT).trim() + "," + (int) (System.currentTimeMillis() / 1000) + ",0," + LOG_TYPE_MALICIOUS + "\n";
                 throw new IOException("Unable to decrypt the key!");
             }
             Utilities.log("Key from storage", false);
@@ -279,7 +283,7 @@ public class Ticket {
     private byte[] getSerialNum() {
         byte[] serialNum = new byte[SIZE_SERIAL_NUM * 4];
         if (utils.readPages(PAGE_SERIAL_NUM, SIZE_SERIAL_NUM, serialNum, 0)) {
-            // TODO: Fetch the blocked list from the cloud
+            // Fetch the blocked list from the cloud
             Callback cb = new Callback() {
                 @Override
                 public void onFailure(Call call, IOException e) {
@@ -290,21 +294,21 @@ public class Ticket {
                 public void onResponse(Call call, Response response) {
                     if (response.isSuccessful()) {
                         try {
-                            JSONObject responseObj = new JSONObject(response.body().string());
-                            String[] list = responseObj.getString("blocked_list").split("\n");
+                            String responseStr = response.body().string();
+                            String[] list = responseStr.split("\n");
                             blockedSerialNum.clear();
                             for (String str : list) {
                                 blockedSerialNum.add(str);
                             }
-                        } catch (JSONException | IOException e) {
+                        } catch (IOException e) {
                             e.printStackTrace();
                         }
                     }
                 }
             };
-//            makeRequest(HOST + "blocked", cb);
+            makeRequest(HOST + "blocked", cb);
 
-            if (!blockedSerialNum.contains(Base64.encodeToString(serialNum, Base64.DEFAULT))) {
+            if (!blockedSerialNum.contains(Base64.encodeToString(serialNum, Base64.DEFAULT).trim())) {
                 return serialNum;
             } else {
                 return new byte[]{0};
@@ -317,7 +321,7 @@ public class Ticket {
         byte[] key = new byte[0];
 
         try {
-            PBEKeySpec spec = new PBEKeySpec(new String(getKey(KEY_TYPE_AUTH)).toCharArray(), serialNum, 10000, 512);
+            PBEKeySpec spec = new PBEKeySpec(new String(getKey(serialNum, KEY_TYPE_AUTH)).toCharArray(), serialNum, 10000, 512);
             SecretKeyFactory skf = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
             byte[] hash = skf.generateSecret(spec).getEncoded();
             key = new byte[KEY_SIZE];
@@ -463,7 +467,9 @@ public class Ticket {
         return Arrays.equals(hmac, hmacShortedCalculated);
     }
 
-    private boolean commonChecks(int cnt, int maxRide, int expectedCount, int checkinTime, int expTime, byte[] hmac, byte[] HMacData) {
+    private boolean commonChecks(byte[] serialNum, int cnt, int maxRide, int expectedCount, int checkinTime, int expTime, byte[] hmac, byte[] HMacData) {
+        String log = Base64.encodeToString(serialNum, Base64.DEFAULT).trim() + "," + (int) (System.currentTimeMillis() / 1000) + "," + remainingUses + "," + LOG_TYPE_MALICIOUS + "\n";
+
         if (!checkHMac(hmac, HMacData)) {
             Utilities.log("Corrupted Ticket! Bad HMAC!", false);
             return false;
@@ -479,21 +485,21 @@ public class Ticket {
         if (cnt != expectedCount) {
             Utilities.log("Unreasonable expected counter!", true);
             // Cache it, will eventually report to the cloud later
-            cachedLogs += ((int) System.currentTimeMillis() / 1000) + "," + remainingUses + "," + LOG_TYPE_MALICIOUS + "\n";
+            cachedLogs += log;
             return false;
         }
 
         if (maxRide - cnt > MAX_RIDE_CARD) {
             Utilities.log("Unreasonable rides available!", true);
             // Cache it, will eventually report to the cloud later
-            cachedLogs += ((int) System.currentTimeMillis() / 1000) + "," + remainingUses + "," + LOG_TYPE_MALICIOUS + "\n";
+            cachedLogs += log;
             return false;
         }
 
         if (checkinTime - (int) (System.currentTimeMillis() / 1000) > 0) {
             Utilities.log("Unreasonable checkin time!", true);
             // Cache it, will eventually report to the cloud later
-            cachedLogs += ((int) System.currentTimeMillis() / 1000) + "," + remainingUses + "," + LOG_TYPE_MALICIOUS + "\n";
+            cachedLogs += log;
             return false;
         }
 
@@ -501,7 +507,7 @@ public class Ticket {
         if (expTime - (int) (System.currentTimeMillis() / 1000) > MAX_EXPIRY * 60) {
             Utilities.log("Unreasonable expiryTime!", true);
             // Cache it, will eventually report to the cloud later
-            cachedLogs += ((int) System.currentTimeMillis() / 1000) + "," + remainingUses + "," + LOG_TYPE_MALICIOUS + "\n";
+            cachedLogs += log;
             return false;
         }
 
@@ -563,7 +569,7 @@ public class Ticket {
     }
 
 
-    private boolean addLog(int currentTime, int remainRide, int type) {
+    private boolean addLog(byte[] serialNum, int currentTime, int remainRide, int type) {
         byte[] log = new byte[SIZE_LOGS * 4];
         boolean res = utils.readPages(PAGE_LOGS, SIZE_LOGS, log, 0);
         if (res) {
@@ -581,11 +587,12 @@ public class Ticket {
             byte[] newLog = new byte[SIZE_ONE_LOG * 4];
             System.arraycopy(toByteArray(currentTime), 0, newLog, 0, SIZE_CHECK_TIME * 4);
             System.arraycopy(twoToByteArray(remainRide, type), 0, newLog, SIZE_CHECK_TIME * 4, SIZE_RIDE * 4);
-            cachedLogs += currentTime + "," + remainRide + "," + type + "\n";
-            // TODO: Add logs to the cloud
+            cachedLogs += Base64.encodeToString(serialNum, Base64.DEFAULT).trim() + "," + currentTime + "," + remainRide + "," + type + "\n";
+            // Add logs to the cloud
             try {
                 JSONObject jsonData = new JSONObject();
-                jsonData.put("cached_log", cachedLogs);
+                jsonData.put("password", PASSWORD);
+                jsonData.put("cachedLog", cachedLogs);
                 Callback cb = new Callback() {
                     @Override
                     public void onFailure(Call call, IOException e) {
@@ -599,7 +606,7 @@ public class Ticket {
                         }
                     }
                 };
-//            makePost(HOST + "logs", jsonData.toString(), cb);
+                makePost(HOST + "logs", jsonData.toString(), cb);
             } catch (JSONException e) {
                 e.printStackTrace();
             }
@@ -705,7 +712,7 @@ public class Ticket {
                 return false;
             }
 
-            if (!commonChecks(cnt, maxRide, expectedCount, checkinTime, expiryTime, hmac, HMacData)) {
+            if (!commonChecks(serialNum, cnt, maxRide, expectedCount, checkinTime, expiryTime, hmac, HMacData)) {
                 infoToShow = "Corrupted Ticket!";
                 return false;
             }
@@ -751,7 +758,7 @@ public class Ticket {
             actionType = LOG_TYPE_ISSUE;
         }
 
-        if (!addLog((int) (System.currentTimeMillis() / 1000), remainingUses, actionType)) {
+        if (!addLog(serialNum, (int) (System.currentTimeMillis() / 1000), remainingUses, actionType)) {
             Utilities.log("Error writing log in issue()!", true);
             // Forget about the log if it fails
         }
@@ -829,7 +836,7 @@ public class Ticket {
             return false;
         }
 
-        if (!commonChecks(cnt, maxRide, expectedCount, checkinTime, expiryTime, hmac, HMacData)) {
+        if (!commonChecks(serialNum, cnt, maxRide, expectedCount, checkinTime, expiryTime, hmac, HMacData)) {
             infoToShow = "Corrupted Ticket!";
             return false;
         }
@@ -872,7 +879,7 @@ public class Ticket {
             return false;
         }
 
-        if (!addLog(checkinTime, remainingUses, LOG_TYPE_USE)) {
+        if (!addLog(serialNum, checkinTime, remainingUses, LOG_TYPE_USE)) {
             Utilities.log("Error writing log in use()!", true);
             // Forget about the log if it fails
         }

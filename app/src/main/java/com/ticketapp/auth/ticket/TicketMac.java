@@ -24,8 +24,7 @@ public class TicketMac {
     }
 
     public byte[] generateMac(byte[] data) {
-        if(!isKeySet)
-            return null;
+        if (!isKeySet) return null;
         mac.reset();
         return mac.doFinal(data);
     }
