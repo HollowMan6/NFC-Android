@@ -20,8 +20,17 @@ import java.util.Arrays;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
 
+import okhttp3.Call;
+import okhttp3.Callback;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
+
 public class Ticket {
 
+    public static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
     /**
      * Default keys are stored in res/values/secrets.xml
      **/
@@ -88,6 +97,7 @@ public class Ticket {
     private static KeyStorage keyStorage;
     private static Utilities utils;
     private static String infoToShow = "-"; // Use this to show messages
+    private final OkHttpClient client;
     private Boolean isValid = false;
     private int remainingUses = 0;
     private int expiryTime = 0;
@@ -111,7 +121,7 @@ public class Ticket {
             e.printStackTrace();
             infoToShow = "Failed to get the keys";
         }
-
+        client = new OkHttpClient();
         Commands ul = new Commands();
         utils = new Utilities(ul);
     }
@@ -221,6 +231,26 @@ public class Ticket {
      */
     public int getExpiryTime() {
         return expiryTime;
+    }
+
+    private Call makeRequest(String url, Callback callback) {
+        Request request = new Request.Builder()
+                .url(url)
+                .build();
+        Call call = client.newCall(request);
+        call.enqueue(callback);
+        return call;
+    }
+
+    private Call makePost(String url, String json, Callback callback) {
+        RequestBody body = RequestBody.create(json, JSON);
+        Request request = new Request.Builder()
+                .url(url)
+                .post(body)
+                .build();
+        Call call = client.newCall(request);
+        call.enqueue(callback);
+        return call;
     }
 
     private byte[] getSerialNum() {
@@ -762,5 +792,38 @@ public class Ticket {
         infoToShow = "Remaining ride: " + remainingUses + "\nExpiry time: " + simpleDateFormat.format(timestamp) + "\nCommunication Time: " + (System.currentTimeMillis() - timeCounter) + "ms";
         isValid = true;
         return true;
+    }
+}
+
+class HTTPCallback implements Callback {
+    public String responseStr = "";
+    public int code;
+    public boolean failed = false;
+    public boolean completed = false;
+
+    @Override
+    public void onFailure(Call call, IOException e) {
+        // Something went wrong
+        failed = true;
+        completed = true;
+        e.printStackTrace();
+    }
+
+    @Override
+    public void onResponse(Call call, Response response) {
+        code = response.code();
+        if (response.isSuccessful()) {
+            try {
+                responseStr = response.body().string();
+            } catch (IOException e) {
+                failed = true;
+                completed = true;
+                e.printStackTrace();
+            }
+        } else {
+            // Request not successful
+            failed = true;
+        }
+        completed = true;
     }
 }
