@@ -2,11 +2,15 @@ package com.ticketapp.auth.ticket;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.util.Base64;
 
 import com.ticketapp.auth.R;
 import com.ticketapp.auth.app.main.TicketActivity;
 import com.ticketapp.auth.app.ulctools.Commands;
 import com.ticketapp.auth.app.ulctools.Utilities;
+
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -15,7 +19,9 @@ import java.security.NoSuchAlgorithmException;
 import java.security.spec.InvalidKeySpecException;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
@@ -36,6 +42,7 @@ public class Ticket {
      **/
     private static final byte[] defaultAuthenticationKey = TicketActivity.outer.getString(R.string.default_auth_key).getBytes();
     private static final String secretAlias = TicketActivity.outer.getString(R.string.secret_alias);
+    private static final String HOST = "https://foo.bar/";
     /**
      * Data Structure
      */
@@ -71,6 +78,7 @@ public class Ticket {
     private static final int LOG_TYPE_ISSUE = 0;
     private static final int LOG_TYPE_TOPUP = 1;
     private static final int LOG_TYPE_USE = 2;
+    private static final int LOG_TYPE_MALICIOUS = 3;
     private static final int NUM_LOG = 3;
     private static final int SIZE_ONE_LOG = SIZE_CHECK_TIME + SIZE_RIDE;
     private static final int SIZE_LOGS = SIZE_ONE_LOG * NUM_LOG;
@@ -90,6 +98,7 @@ public class Ticket {
     private static final String VERSION = "v0.1";
     private static final int KEY_TYPE_AUTH = 0;
     private static final int KEY_TYPE_HMAC = 1;
+    private static final OkHttpClient client = new OkHttpClient();
     public static SharedPreferences sharedPref = TicketActivity.outer.getSharedPreferences(secretAlias, Context.MODE_PRIVATE);
     public static SharedPreferences.Editor storageEditor = sharedPref.edit();
     public static byte[] data = new byte[192];
@@ -97,7 +106,8 @@ public class Ticket {
     private static KeyStorage keyStorage;
     private static Utilities utils;
     private static String infoToShow = "-"; // Use this to show messages
-    private final OkHttpClient client;
+    private static String cachedLogs = "";
+    private List<String> blockedSerialNum = new ArrayList<String>();
     private Boolean isValid = false;
     private int remainingUses = 0;
     private int expiryTime = 0;
@@ -121,7 +131,6 @@ public class Ticket {
             e.printStackTrace();
             infoToShow = "Failed to get the keys";
         }
-        client = new OkHttpClient();
         Commands ul = new Commands();
         utils = new Utilities(ul);
     }
@@ -152,14 +161,31 @@ public class Ticket {
         }
 
         if (enCryptedKeyExpTime.isEmpty() || keyExpTime < System.currentTimeMillis()) {
-            // TODO: Fetch the keys from server
+            // TODO: Fetch the keys from cloud
+            HTTPCallback cb = new HTTPCallback();
+            String url = HOST + "keyMaster";
+            if (type == KEY_TYPE_HMAC) {
+                url = HOST + "keyHMac";
+            }
+//            makeRequest(url, cb);
+            // Allow maximum delay of 1 second
+            Long delayTime = System.currentTimeMillis() + 1000;
+//            // Wait to be available
+//            while (!cb.completed && System.currentTimeMillis() < delayTime) {}
+//            if(cb.completed && !cb.failed) {
+//                key = cb.responseStr;
+//            }
+            // TODO: Remove the secrets
             key = "UqKrQZ!YM94@2hdJ";
             if (type == KEY_TYPE_HMAC) {
                 key = "QsmaRpTnSHx77lTX";
             }
-            storageEditor.putString(enCryptedKeyExpTimeAlias, keyStorage.encrypt(Long.toString(System.currentTimeMillis() + 60 * 1000)));
-            storageEditor.apply();
-            Utilities.log("Key from fetch as expired", false);
+
+            if (!key.isEmpty()) {
+                storageEditor.putString(enCryptedKeyExpTimeAlias, keyStorage.encrypt(Long.toString(System.currentTimeMillis() + 60 * 1000)));
+                storageEditor.apply();
+                Utilities.log("Key from fetch as expired", false);
+            }
         }
 
         String enCryptedKey = sharedPref.getString(enCryptedKeyAlias, "");
@@ -183,11 +209,28 @@ public class Ticket {
             // Something must be wrong if the stored key not equals to decrypted one from the Internet
             if (deCryptedKey.isEmpty() || (!key.isEmpty() && !deCryptedKey.equals(key))) {
                 Utilities.log("Unable to decrypt the key!", true);
+                // Cache it, will eventually report to the cloud later
+                cachedLogs += ((int) System.currentTimeMillis() / 1000) + ",0," + LOG_TYPE_MALICIOUS + "\n";
                 throw new IOException("Unable to decrypt the key!");
             }
             Utilities.log("Key from storage", false);
         }
         return deCryptedKey.getBytes();
+    }
+
+    private static Call makeRequest(String url, Callback callback) {
+        Request request = new Request.Builder().url(url).build();
+        Call call = client.newCall(request);
+        call.enqueue(callback);
+        return call;
+    }
+
+    private static Call makePost(String url, String json, Callback callback) {
+        RequestBody body = RequestBody.create(json, JSON);
+        Request request = new Request.Builder().url(url).post(body).build();
+        Call call = client.newCall(request);
+        call.enqueue(callback);
+        return call;
     }
 
     /**
@@ -233,30 +276,39 @@ public class Ticket {
         return expiryTime;
     }
 
-    private Call makeRequest(String url, Callback callback) {
-        Request request = new Request.Builder()
-                .url(url)
-                .build();
-        Call call = client.newCall(request);
-        call.enqueue(callback);
-        return call;
-    }
-
-    private Call makePost(String url, String json, Callback callback) {
-        RequestBody body = RequestBody.create(json, JSON);
-        Request request = new Request.Builder()
-                .url(url)
-                .post(body)
-                .build();
-        Call call = client.newCall(request);
-        call.enqueue(callback);
-        return call;
-    }
-
     private byte[] getSerialNum() {
         byte[] serialNum = new byte[SIZE_SERIAL_NUM * 4];
         if (utils.readPages(PAGE_SERIAL_NUM, SIZE_SERIAL_NUM, serialNum, 0)) {
-            return serialNum;
+            // TODO: Fetch the blocked list from the cloud
+            Callback cb = new Callback() {
+                @Override
+                public void onFailure(Call call, IOException e) {
+                    e.printStackTrace();
+                }
+
+                @Override
+                public void onResponse(Call call, Response response) {
+                    if (response.isSuccessful()) {
+                        try {
+                            JSONObject responseObj = new JSONObject(response.body().string());
+                            String[] list = responseObj.getString("blocked_list").split("\n");
+                            blockedSerialNum.clear();
+                            for (String str : list) {
+                                blockedSerialNum.add(str);
+                            }
+                        } catch (JSONException | IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+            };
+//            makeRequest(HOST + "blocked", cb);
+
+            if (!blockedSerialNum.contains(Base64.encodeToString(serialNum, Base64.DEFAULT))) {
+                return serialNum;
+            } else {
+                return new byte[]{0};
+            }
         }
         return new byte[0];
     }
@@ -426,22 +478,30 @@ public class Ticket {
         // Or it is a corrupted card with suspicious data
         if (cnt != expectedCount) {
             Utilities.log("Unreasonable expected counter!", true);
+            // Cache it, will eventually report to the cloud later
+            cachedLogs += ((int) System.currentTimeMillis() / 1000) + "," + remainingUses + "," + LOG_TYPE_MALICIOUS + "\n";
             return false;
         }
 
         if (maxRide - cnt > MAX_RIDE_CARD) {
             Utilities.log("Unreasonable rides available!", true);
+            // Cache it, will eventually report to the cloud later
+            cachedLogs += ((int) System.currentTimeMillis() / 1000) + "," + remainingUses + "," + LOG_TYPE_MALICIOUS + "\n";
             return false;
         }
 
         if (checkinTime - (int) (System.currentTimeMillis() / 1000) > 0) {
             Utilities.log("Unreasonable checkin time!", true);
+            // Cache it, will eventually report to the cloud later
+            cachedLogs += ((int) System.currentTimeMillis() / 1000) + "," + remainingUses + "," + LOG_TYPE_MALICIOUS + "\n";
             return false;
         }
 
         // TODO: Change the expiry time to be in days
         if (expTime - (int) (System.currentTimeMillis() / 1000) > MAX_EXPIRY * 60) {
             Utilities.log("Unreasonable expiryTime!", true);
+            // Cache it, will eventually report to the cloud later
+            cachedLogs += ((int) System.currentTimeMillis() / 1000) + "," + remainingUses + "," + LOG_TYPE_MALICIOUS + "\n";
             return false;
         }
 
@@ -521,6 +581,28 @@ public class Ticket {
             byte[] newLog = new byte[SIZE_ONE_LOG * 4];
             System.arraycopy(toByteArray(currentTime), 0, newLog, 0, SIZE_CHECK_TIME * 4);
             System.arraycopy(twoToByteArray(remainRide, type), 0, newLog, SIZE_CHECK_TIME * 4, SIZE_RIDE * 4);
+            cachedLogs += currentTime + "," + remainRide + "," + type + "\n";
+            // TODO: Add logs to the cloud
+            try {
+                JSONObject jsonData = new JSONObject();
+                jsonData.put("cached_log", cachedLogs);
+                Callback cb = new Callback() {
+                    @Override
+                    public void onFailure(Call call, IOException e) {
+                        e.printStackTrace();
+                    }
+
+                    @Override
+                    public void onResponse(Call call, Response response) {
+                        if (response.isSuccessful()) {
+                            cachedLogs = "";
+                        }
+                    }
+                };
+//            makePost(HOST + "logs", jsonData.toString(), cb);
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
             return utils.writePages(newLog, 0, PAGE_LOGS + minIndex * SIZE_ONE_LOG, SIZE_ONE_LOG);
         }
         return false;
@@ -546,6 +628,10 @@ public class Ticket {
         byte[] serialNum = getSerialNum();
         if (serialNum.length == 0) {
             Utilities.log("Error reading serial number in issue()!", true);
+            return false;
+        } else if (serialNum.length == 1 && serialNum[0] == 0) {
+            Utilities.log("Blocked card in issue()!", true);
+            infoToShow = "Blocked card!";
             return false;
         }
 
@@ -685,6 +771,10 @@ public class Ticket {
         byte[] serialNum = getSerialNum();
         if (serialNum.length == 0) {
             Utilities.log("Error reading serial number in use()!", true);
+            return false;
+        } else if (serialNum.length == 1 && serialNum[0] == 0) {
+            Utilities.log("Blocked card in use()!", true);
+            infoToShow = "Blocked card!";
             return false;
         }
 
