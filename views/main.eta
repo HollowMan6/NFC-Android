@@ -1,0 +1,38 @@
+<% layout("./layouts/layout.eta") %>
+<h1>NFC Android Manager</h1>
+
+<form action="/blocked" method="post">
+  <input type="text" name="serialNum" placeholder="Serial Number (Base64)" />
+  <input type="submit" value="Submit" />
+</form>
+
+<h2>Blocked NFC Cards Number</h2>
+<ul>
+  <% for (const card of it.block) { %>
+    <li>
+      <%= card %>
+      <form action="/unblock" method="post">
+        <input type="hidden" name="serialNum" value="<%= card %>" />
+        <input type="submit" value="Unblock" />
+      </form>
+    </li>
+  <% } %>
+</ul>
+
+<h2>Logs</h2>
+<table>
+  <tr>
+    <th>Serial Number</th>
+    <th>Time</th>
+    <th>Remaining Use</th>
+    <th>Type</th>
+  </tr>
+<% for (const log of it.logs) { %>
+  <tr>
+    <td><%= log.serialnum %></td>
+    <th><%= new Date(log.timestamp * 1000).toGMTString() %></th>
+    <th><%= log.remainuse %></th>
+    <th><%= log.type %></th>
+  </tr>
+<% } %>
+</table>
