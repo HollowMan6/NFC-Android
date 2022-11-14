@@ -42,7 +42,7 @@ public class Ticket {
      **/
     private static final byte[] defaultAuthenticationKey = TicketActivity.outer.getString(R.string.default_auth_key).getBytes();
     private static final String secretAlias = TicketActivity.outer.getString(R.string.secret_alias);
-    private static final String HOST = "http://192.168.2.7:7777/";
+    private static final String HOST = "https://nfc-android.fly.dev/";
     private static final String PASSWORD = "l54G*b,_Qtm85qo/Js&ec809@sZ2A$";
     /**
      * Data Structure
