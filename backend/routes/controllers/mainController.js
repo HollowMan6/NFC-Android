@@ -114,4 +114,24 @@ const showLogs = async ({ request, response }) => {
   }
 };
 
-export { showMain, showBlocked, showLogs, showUnblocked };
+
+const showLoginForm = ({ render }) => {
+  render("login.eta");
+}
+
+const processLogin = async ({ request, response, state, render }) => {
+  const body = request.body({ type: "form" });
+  const params = await body.value;
+
+  const passwordMatches = params.get("password") === passwd;
+
+  if (!passwordMatches) {
+      render("login.eta", { error: "Your credential is wrong" });
+      return;
+  }
+  await state.session.set("login", true);
+
+  response.redirect("/");
+}
+
+export { showMain, showBlocked, showLogs, showUnblocked, showLoginForm, processLogin };

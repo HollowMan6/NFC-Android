@@ -1,15 +1,14 @@
 version: "3.4"
 
 services:
-  app:
-    build: .
-    image: app-oak
+  backend:
+    build: backend
+    image: backend
     restart: "no"
     volumes:
-      - .:/app
-      - ./app-cache/:/app-cache
+      - ./backend/:/app
     ports:
-      - 7777:7777
+      - 8080:8080
     depends_on:
       - database
       - flyway
