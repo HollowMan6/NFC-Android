@@ -2,6 +2,7 @@ package com.ticketapp.auth.ticket;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.support.annotation.NonNull;
 import android.util.Base64;
 
 import com.ticketapp.auth.R;
@@ -9,6 +10,7 @@ import com.ticketapp.auth.app.main.TicketActivity;
 import com.ticketapp.auth.app.ulctools.Commands;
 import com.ticketapp.auth.app.ulctools.Utilities;
 
+import org.jetbrains.annotations.NotNull;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -108,7 +110,7 @@ public class Ticket {
     private static Utilities utils;
     private static String infoToShow = "-"; // Use this to show messages
     private static String cachedLogs = "";
-    private List<String> blockedSerialNum = new ArrayList<String>();
+    private List<String> blockedSerialNum = new ArrayList<>();
     private Boolean isValid = false;
     private int remainingUses = 0;
     private int expiryTime = 0;
@@ -177,7 +179,7 @@ public class Ticket {
             }
 
             // Allow maximum delay of 1 second
-            Long delayTime = System.currentTimeMillis() + 1000;
+            long delayTime = System.currentTimeMillis() + 1000;
             // Wait to be available
             while (!cb.completed && System.currentTimeMillis() < delayTime) {
             }
@@ -286,21 +288,19 @@ public class Ticket {
             // Fetch the blocked list from the cloud
             Callback cb = new Callback() {
                 @Override
-                public void onFailure(Call call, IOException e) {
+                public void onFailure(@NonNull Call call, IOException e) {
                     e.printStackTrace();
                 }
 
                 @Override
-                public void onResponse(Call call, Response response) {
+                public void onResponse(@NonNull Call call, Response response) {
                     if (response.isSuccessful()) {
                         try {
                             String responseStr = response.body().string();
                             String[] list = responseStr.split("\n");
                             blockedSerialNum.clear();
-                            for (String str : list) {
-                                blockedSerialNum.add(str);
-                            }
-                        } catch (IOException e) {
+                            blockedSerialNum = Arrays.asList(list);
+                        } catch (IOException | NullPointerException e) {
                             e.printStackTrace();
                         }
                     }
@@ -570,6 +570,30 @@ public class Ticket {
 
 
     private boolean addLog(byte[] serialNum, int currentTime, int remainRide, int type) {
+        cachedLogs += Base64.encodeToString(serialNum, Base64.DEFAULT).trim() + "," + currentTime + "," + remainRide + "," + type + "\n";
+        // Add logs to the cloud
+        try {
+            JSONObject jsonData = new JSONObject();
+            jsonData.put("password", PASSWORD);
+            jsonData.put("cachedLog", cachedLogs);
+            Callback cb = new Callback() {
+                @Override
+                public void onFailure(@NotNull Call call, IOException e) {
+                    e.printStackTrace();
+                }
+
+                @Override
+                public void onResponse(@NotNull Call call, Response response) {
+                    if (response.isSuccessful()) {
+                        cachedLogs = "";
+                    }
+                }
+            };
+            makePost(HOST + "logs", jsonData.toString(), cb);
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+
         byte[] log = new byte[SIZE_LOGS * 4];
         boolean res = utils.readPages(PAGE_LOGS, SIZE_LOGS, log, 0);
         if (res) {
@@ -587,29 +611,6 @@ public class Ticket {
             byte[] newLog = new byte[SIZE_ONE_LOG * 4];
             System.arraycopy(toByteArray(currentTime), 0, newLog, 0, SIZE_CHECK_TIME * 4);
             System.arraycopy(twoToByteArray(remainRide, type), 0, newLog, SIZE_CHECK_TIME * 4, SIZE_RIDE * 4);
-            cachedLogs += Base64.encodeToString(serialNum, Base64.DEFAULT).trim() + "," + currentTime + "," + remainRide + "," + type + "\n";
-            // Add logs to the cloud
-            try {
-                JSONObject jsonData = new JSONObject();
-                jsonData.put("password", PASSWORD);
-                jsonData.put("cachedLog", cachedLogs);
-                Callback cb = new Callback() {
-                    @Override
-                    public void onFailure(Call call, IOException e) {
-                        e.printStackTrace();
-                    }
-
-                    @Override
-                    public void onResponse(Call call, Response response) {
-                        if (response.isSuccessful()) {
-                            cachedLogs = "";
-                        }
-                    }
-                };
-                makePost(HOST + "logs", jsonData.toString(), cb);
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
             return utils.writePages(newLog, 0, PAGE_LOGS + minIndex * SIZE_ONE_LOG, SIZE_ONE_LOG);
         }
         return false;
@@ -899,7 +900,7 @@ class HTTPCallback implements Callback {
     public boolean completed = false;
 
     @Override
-    public void onFailure(Call call, IOException e) {
+    public void onFailure(@NotNull Call call, IOException e) {
         // Something went wrong
         failed = true;
         completed = true;
@@ -907,12 +908,12 @@ class HTTPCallback implements Callback {
     }
 
     @Override
-    public void onResponse(Call call, Response response) {
+    public void onResponse(@NotNull Call call, Response response) {
         code = response.code();
         if (response.isSuccessful()) {
             try {
                 responseStr = response.body().string();
-            } catch (IOException e) {
+            } catch (IOException | NullPointerException e) {
                 failed = true;
                 completed = true;
                 e.printStackTrace();
