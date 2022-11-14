@@ -115,8 +115,19 @@ const showLogs = async ({ request, response }) => {
 };
 
 
-const showLoginForm = ({ render }) => {
-  render("login.eta");
+const showLoginForm = async ({ render, request, state, response }) => {
+  const login = await state.session.get("login");
+  const logout = request.url.searchParams.get("logout");
+  if (login) {
+    if (logout) {
+      await state.session.set("login", false);
+      render("login.eta", { error: "Logged out successfully" });
+      return;
+    }
+    response.redirect("/");
+  } else {
+    render("login.eta");
+  }
 }
 
 const processLogin = async ({ request, response, state, render }) => {
@@ -126,8 +137,8 @@ const processLogin = async ({ request, response, state, render }) => {
   const passwordMatches = params.get("password") === passwd;
 
   if (!passwordMatches) {
-      render("login.eta", { error: "Your credential is wrong" });
-      return;
+    render("login.eta", { error: "Your credential is wrong" });
+    return;
   }
   await state.session.set("login", true);
 

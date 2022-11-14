@@ -1,6 +1,6 @@
 import { Pool } from "../deps.js";
 
-const CONCURRENT_CONNECTIONS = 2;
+const CONCURRENT_CONNECTIONS = 50;
 let connectionPool;
 if (Deno.env.get("DATABASE_URL")) {
   connectionPool = new Pool(Deno.env.get("DATABASE_URL"), CONCURRENT_CONNECTIONS);
