@@ -5,12 +5,13 @@ import android.content.SharedPreferences;
 import android.support.annotation.NonNull;
 import android.util.Base64;
 
+import com.example.auth.Secrets;
+import com.ticketapp.auth.BuildConfig;
 import com.ticketapp.auth.R;
 import com.ticketapp.auth.app.main.TicketActivity;
 import com.ticketapp.auth.app.ulctools.Commands;
 import com.ticketapp.auth.app.ulctools.Utilities;
 
-import org.jetbrains.annotations.NotNull;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -23,7 +24,6 @@ import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
@@ -45,7 +45,7 @@ public class Ticket {
     private static final byte[] defaultAuthenticationKey = TicketActivity.outer.getString(R.string.default_auth_key).getBytes();
     private static final String secretAlias = TicketActivity.outer.getString(R.string.secret_alias);
     private static final String HOST = "https://nfc-android.fly.dev/";
-    private static final String PASSWORD = "l54G*b,_Qtm85qo/Js&ec809@sZ2A$";
+    private static final String PASSWORD = new Secrets().getPassWord(BuildConfig.APPLICATION_ID);
     /**
      * Data Structure
      */
@@ -110,7 +110,7 @@ public class Ticket {
     private static Utilities utils;
     private static String infoToShow = "-"; // Use this to show messages
     private static String cachedLogs = "";
-    private List<String> blockedSerialNum = new ArrayList<>();
+    private ArrayList<String> blockedSerialNum = new ArrayList<>();
     private Boolean isValid = false;
     private int remainingUses = 0;
     private int expiryTime = 0;
@@ -299,7 +299,7 @@ public class Ticket {
                             String responseStr = response.body().string();
                             String[] list = responseStr.split("\n");
                             blockedSerialNum.clear();
-                            blockedSerialNum = Arrays.asList(list);
+                            blockedSerialNum = new ArrayList<>(Arrays.asList(list));
                         } catch (IOException | NullPointerException e) {
                             e.printStackTrace();
                         }
@@ -578,12 +578,12 @@ public class Ticket {
             jsonData.put("cachedLog", cachedLogs);
             Callback cb = new Callback() {
                 @Override
-                public void onFailure(@NotNull Call call, IOException e) {
+                public void onFailure(@NonNull Call call, IOException e) {
                     e.printStackTrace();
                 }
 
                 @Override
-                public void onResponse(@NotNull Call call, Response response) {
+                public void onResponse(@NonNull Call call, Response response) {
                     if (response.isSuccessful()) {
                         cachedLogs = "";
                     }
@@ -900,7 +900,7 @@ class HTTPCallback implements Callback {
     public boolean completed = false;
 
     @Override
-    public void onFailure(@NotNull Call call, IOException e) {
+    public void onFailure(@NonNull Call call, IOException e) {
         // Something went wrong
         failed = true;
         completed = true;
@@ -908,7 +908,7 @@ class HTTPCallback implements Callback {
     }
 
     @Override
-    public void onResponse(@NotNull Call call, Response response) {
+    public void onResponse(@NonNull Call call, Response response) {
         code = response.code();
         if (response.isSuccessful()) {
             try {

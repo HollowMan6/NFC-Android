@@ -1,3 +1,6 @@
+.cxx
+#credentials.properties
+
 # Built application files
 *.apk
 *.ap_
