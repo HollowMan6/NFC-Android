@@ -31,7 +31,7 @@ const log = async (serialNum, timestamp, remainUse, type) => {
 
 const getLogs = async () => {
     const res = await executeQuery(
-        "SELECT * FROM logs"
+        "SELECT * FROM logs ORDER BY timestamp DESC"
     )
 
     return res.rows
