@@ -7,6 +7,7 @@ services:
     restart: "no"
     volumes:
       - ./backend/:/app
+    command: /wait-for-it.sh database-server:5432 -- deno run --unstable --watch --allow-net --allow-read --allow-write --allow-env --no-check app.js
     ports:
       - 8080:8080
     depends_on:
@@ -17,13 +18,13 @@ services:
 
   database:
     container_name: database-server
-    image: postgres:14.1
+    image: postgres
     restart: "no"
     env_file:
         - project.env
 
   flyway:
-    image: flyway/flyway:8.4.0-alpine
+    image: flyway/flyway:9.8.1-alpine
     depends_on:
       - database
     volumes:

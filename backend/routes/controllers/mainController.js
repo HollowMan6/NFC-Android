@@ -1,6 +1,6 @@
 import * as mainService from "../../services/mainService.js";
 
-const passwd = "l54G*b,_Qtm85qo/Js&ec809@sZ2A$"
+const passwd = Deno.env.get("PASSWORD");
 
 const showMain = async ({ request, render, response }) => {
   if (request.method === "POST") {
@@ -11,9 +11,9 @@ const showMain = async ({ request, render, response }) => {
     if (password === passwd) {
       const key = request.url.searchParams.get("key");
       if (key === "master") {
-        res = "UqKrQZ!YM94@2hdJ";
+        res = Deno.env.get("MASTERKEY");
       } else if (key === "hmac") {
-        res = "QsmaRpTnSHx77lTX";
+        res = Deno.env.get("HMACKEY");
       }
     }
     response.body = res;

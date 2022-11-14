@@ -3,6 +3,6 @@ export {
   Application,
   Router,
   send,
-} from "https://deno.land/x/oak@v10.6.0/mod.ts";
-export { Session } from "https://deno.land/x/oak_sessions@v3.5.1/mod.ts";
+} from "https://deno.land/x/oak@v11.1.0/mod.ts";
+export { Session } from "https://deno.land/x/oak_sessions@v4.0.6/mod.ts";
 export { Pool } from "https://deno.land/x/postgres@v0.17.0/mod.ts";
