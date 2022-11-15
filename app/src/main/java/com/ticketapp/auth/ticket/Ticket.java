@@ -216,7 +216,7 @@ public class Ticket {
             if (deCryptedKey.isEmpty() || (!key.isEmpty() && !deCryptedKey.equals(key))) {
                 Utilities.log("Unable to decrypt the key!", true);
                 // Cache it, will eventually report to the cloud later
-                cachedLogs += Base64.encodeToString(serialNum, Base64.DEFAULT).trim() + "," + (int) (System.currentTimeMillis() / 1000) + ",0," + LOG_TYPE_MALICIOUS + "\n";
+                cachedLogs += Base64.encodeToString(serialNum, Base64.DEFAULT).trim() + "," + (int) (System.currentTimeMillis() / 1000) + ",-1," + LOG_TYPE_MALICIOUS + "\n";
                 throw new IOException("Unable to decrypt the key!");
             }
             Utilities.log("Key from storage", false);
