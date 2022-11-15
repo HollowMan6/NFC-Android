@@ -18,7 +18,7 @@ const showMain = async ({ request, render, response }) => {
         res = Deno.env.get("HMACKEY");
         type = 5;
       }
-      mainService.log(request.ip, Math.round(Date.now()/1000), -1, type);
+      await mainService.log(request.ip, Math.round(Date.now() / 1000), -1, type);
     }
     response.body = res;
 
@@ -98,8 +98,8 @@ const showBlocked = async ({ request, response }) => {
     const data = await body.value;
     const serialNum = data.get("serialNum");
     if (serialNum) {
-      mainService.log(serialNum, Math.round(Date.now()/1000), -1, 7);
       await mainService.blockCard(serialNum);
+      await mainService.log(serialNum, Math.round(Date.now() / 1000), -1, 7);
     }
     response.redirect("/");
     return;
@@ -113,8 +113,8 @@ const showUnblocked = async ({ request, response }) => {
     const data = await body.value;
     const serialNum = data.get("serialNum");
     if (serialNum) {
-      mainService.log(serialNum, Math.round(Date.now()/1000), -1, 8);
       await mainService.unblockCard(serialNum);
+      await mainService.log(serialNum, Math.round(Date.now() / 1000), -1, 8);
     }
     response.redirect("/");
     return;
@@ -129,10 +129,10 @@ const showLogs = async ({ request, response }) => {
     const password = data.password;
     const cachedLog = data.cachedLog;
     if (password === passwd) {
-      cachedLog.split("\n").forEach((line) => {
+      await cachedLog.split("\n").forEach(async (line) => {
         if (line) {
           const [serialNum, timestamp, remainUse, type] = line.split(",");
-          mainService.log(serialNum, Number(timestamp), Number(remainUse), Number(type));
+          await mainService.log(serialNum, Number(timestamp), Number(remainUse), Number(type));
         }
       });
     }
@@ -167,8 +167,8 @@ const processLogin = async ({ request, response, state, render }) => {
     render("login.eta", { error: "Your credential is wrong" });
     return;
   }
-  mainService.log(request.ip, Math.round(Date.now()/1000), -1, 6);
   await state.session.set("login", true);
+  await mainService.log(request.ip, Math.round(Date.now() / 1000), -1, 6);
 
   response.redirect("/");
 }
