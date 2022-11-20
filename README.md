@@ -2,6 +2,10 @@
 
 [Back-end](../../tree/backend)
 
+[Back-end without database](../../tree/backend-nosql)
+
+[Documentation and Slides](../../tree/demo)
+
 [Wipe Card](../../tree/wipe)
 
 Hide Secret:

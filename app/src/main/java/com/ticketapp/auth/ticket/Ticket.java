@@ -279,7 +279,7 @@ public class Ticket {
      * After validation, get the expiry time
      */
     public int getExpiryTime() {
-        return expiryTime;
+        return expiryTime/60;
     }
 
     private byte[] getSerialNum() {
@@ -774,6 +774,7 @@ public class Ticket {
     public boolean use() throws GeneralSecurityException {
         boolean res;
         long timeCounter = System.currentTimeMillis();
+        isValid = false;
         infoToShow = "Communication error!";
 
         byte[] serialNum = getSerialNum();
