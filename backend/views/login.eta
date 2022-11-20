@@ -1,0 +1,10 @@
+<% layout("./layouts/layout.eta") %>
+
+<form align="center" method="POST" action="/auth">
+  <input type="password" name="password" placeholder="Token" />
+  <input type="submit" value="Login" />
+</form>
+
+<% if(it.error){ %>
+  <h5 align="center">! <%= it.error %></h5>
+<% } %>

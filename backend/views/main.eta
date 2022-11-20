@@ -1,0 +1,45 @@
+<% layout("./layouts/layout.eta") %>
+
+<form align="center" action="/auth" method="get">
+  <input type="submit" name="logout" value="Log Out" />
+</form>
+
+<h2 align="center">Block NFC Card:</h2>
+<form align="center" action="/blocked" method="post">
+  <input type="text" name="serialNum" placeholder="Serial Number (Base64)" />
+  <input type="submit" value="Submit" />
+</form>
+
+<h2 align="center">Blocked NFC Cards Serial Number</h2>
+<% if (it.block.length > 0) { %>
+  <ul align="center">
+    <% for (const card of it.block) { %>
+      <li> <form action="/unblock" method="post" style="display: inline;">
+         <%= card %>
+          <input type="hidden" name="serialNum" value="<%= card %>" />
+          <input type="submit" value="Unblock" />
+        </form>
+      </li>
+    <% } %>
+  </ul>
+<% } else { %>
+  <p align="center">No blocked cards</p>
+<% } %>
+
+<h2 align="center">Logs</h2>
+<table align="center">
+  <tr>
+    <th>Identifier</th>
+    <th>Time</th>
+    <th>Remaining Use</th>
+    <th>Type</th>
+  </tr>
+<% for (const log of it.logs) { %>
+  <tr>
+    <td><%= log.serialnum %></td>
+    <th><%= new Date(log.timestamp * 1000).toGMTString() %></th>
+    <th><%= log.remainuse %></th>
+    <th><%= log.type %></th>
+  </tr>
+<% } %>
+</table>
