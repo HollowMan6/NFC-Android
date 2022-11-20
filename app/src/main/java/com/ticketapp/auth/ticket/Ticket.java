@@ -44,7 +44,7 @@ public class Ticket {
      **/
     private static final byte[] defaultAuthenticationKey = TicketActivity.outer.getString(R.string.default_auth_key).getBytes();
     private static final String secretAlias = TicketActivity.outer.getString(R.string.secret_alias);
-    private static final String HOST = "https://nfc-android.fly.dev/";
+    private static final String HOST = "https://nfc-android.azurewebsites.net/";
     private static final String PASSWORD = new Secrets().getPassWord(BuildConfig.APPLICATION_ID);
     /**
      * Data Structure

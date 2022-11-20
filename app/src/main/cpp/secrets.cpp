@@ -34,6 +34,19 @@ char *customDecode(char *str) {
     * To improve your key security you can encode it before to integrate it in the app.
     * And then decode it with your own logic in this function.
     */
+    int c = 18;
+    int l = strlen(str);
+    const char *alpha[2] = { "abcdefghijklmnopqrstuvwxyz", "ABCDEFGHIJKLMNOPQRSTUVWXYZ"};
+    int i;
+    for (i = 0; i < l; i++)
+    {
+        if (!isalpha(str[i]))
+            continue;
+        if (isupper(str[i]))
+            str[i] = alpha[1][((int)(tolower(str[i]) - 'a') + c) % 26];
+        else
+            str[i] = alpha[0][((int)(tolower(str[i]) - 'a') + c) % 26];
+    }
     return str;
 }
 
@@ -69,6 +82,6 @@ Java_com_example_auth_Secrets_getPassWord(
         JNIEnv *pEnv,
         jobject pThis,
         jstring packageName) {
-    char obfuscatedSecret[] = { 0x5e, 0x50, 0x5, 0x7e, 0x1f, 0x7, 0x1d, 0x6e, 0x61, 0x41, 0x5c, 0xd, 0x7, 0x13, 0x5a, 0x1c, 0x2c, 0x45, 0x44, 0x5d, 0x5a, 0xe, 0x51, 0xd, 0x75, 0x44, 0x63, 0x2, 0x74, 0x40 };
+    char obfuscatedSecret[] = { 0x46, 0x50, 0x5, 0x76, 0x1f, 0xf, 0x1d, 0x6e, 0x69, 0x57, 0x44, 0xd, 0x7, 0x1b, 0x42, 0x1c, 0x34, 0x57, 0x44, 0x55, 0x52, 0xe, 0x51, 0xd, 0x75, 0x56, 0x71, 0x2, 0x7c, 0x40 };
     return getOriginalKey(obfuscatedSecret, sizeof(obfuscatedSecret), packageName, pEnv);
 }
