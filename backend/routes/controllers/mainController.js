@@ -91,12 +91,10 @@ const showBlocked = async ({ request, response }) => {
   response.body = "";
   if (request.method === "GET") {
     const res = await mainService.getBlocked();
-    for (let i = 0; i < res.length - 1; i++) {
-      response.body += res[i].serialnum + "\n";
-    }
-    if (res.length > 0) {
-      response.body += res[res.length - 1].serialnum;
-    }
+    res.forEach((row) => {
+      response.body += row + "\n";
+    });
+    response.body = response.body.trim();
     return;
   } else if (request.method === "POST") {
     const body = request.body({ type: "form" });
