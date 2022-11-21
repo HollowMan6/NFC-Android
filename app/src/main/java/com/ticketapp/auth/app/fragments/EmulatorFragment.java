@@ -138,7 +138,7 @@ public class EmulatorFragment extends Fragment {
         getActivity().getActionBar().setIcon(R.drawable.ic_launcher);
 
         ticket_info = v.findViewById(R.id.ticket_info);
-        ticket_info.setText("Ticket info");
+        ticket_info.setText("Waiting for NFC tag scan...");
 
         btn_issue = v.findViewById(R.id.issue_mode);
         btn_validate = v.findViewById(R.id.validate_mode);

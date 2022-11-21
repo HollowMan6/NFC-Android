@@ -111,6 +111,7 @@ public class Ticket {
     private static String infoToShow = "-"; // Use this to show messages
     private static String cachedLogs = "";
     private ArrayList<String> blockedSerialNum = new ArrayList<>();
+    private Boolean macInitializedFailed = true;
     private Boolean isValid = false;
     private int remainingUses = 0;
     private int expiryTime = 0;
@@ -130,9 +131,9 @@ public class Ticket {
         macAlgorithm = new TicketMac();
         try {
             macAlgorithm.setKey(getKey(new byte[0], KEY_TYPE_HMAC));
-        } catch (IOException e) {
+            macInitializedFailed = false;
+        } catch (IOException | IllegalArgumentException e) {
             e.printStackTrace();
-            infoToShow = "Failed to get the keys";
         }
         Commands ul = new Commands();
         utils = new Utilities(ul);
@@ -195,9 +196,9 @@ public class Ticket {
         }
 
         String enCryptedKey = sharedPref.getString(enCryptedKeyAlias, "");
-        String deCryptedKey;
+        String deCryptedKey = "";
 
-        if (enCryptedKey.isEmpty()) {
+        if (enCryptedKey.isEmpty() && !key.isEmpty()) {
             enCryptedKey = keyStorage.encrypt(key);
             if (enCryptedKey.isEmpty()) {
                 Utilities.log("Unable to encrypt the key!", true);
@@ -208,7 +209,7 @@ public class Ticket {
 
             deCryptedKey = key;
             Utilities.log("Key from fetch", false);
-        } else {
+        } else if (!enCryptedKey.isEmpty()) {
             // Has stored the value, decrypt
             deCryptedKey = keyStorage.decrypt(enCryptedKey);
 
@@ -279,7 +280,7 @@ public class Ticket {
      * After validation, get the expiry time
      */
     public int getExpiryTime() {
-        return expiryTime/60;
+        return expiryTime / 60;
     }
 
     private byte[] getSerialNum() {
@@ -329,6 +330,15 @@ public class Ticket {
         } catch (NoSuchAlgorithmException | InvalidKeySpecException | IOException e) {
             e.printStackTrace();
             Utilities.log("Error using PBKDF2WithHmacSHA1!", true);
+        }
+        // Make sure HMac key is also OK
+        if (macInitializedFailed) {
+            try {
+                macAlgorithm.setKey(getKey(new byte[0], KEY_TYPE_HMAC));
+                macInitializedFailed = false;
+            } catch (IOException | IllegalArgumentException e) {
+                e.printStackTrace();
+            }
         }
         return key;
     }
@@ -647,6 +657,7 @@ public class Ticket {
         byte[] cardKey = getCardKey(serialNum);
         if (cardKey.length == 0) {
             Utilities.log("cardKey length is 0 in issue()", true);
+            infoToShow = "Failed to fetch key from the cloud, please check your internet Connection!";
             return false;
         }
 
@@ -791,6 +802,7 @@ public class Ticket {
         byte[] cardKey = getCardKey(serialNum);
         if (cardKey.length == 0) {
             Utilities.log("cardKey length is 0 in use()", true);
+            infoToShow = "Failed to fetch key from the cloud, please check your internet Connection!";
             return false;
         }
 
