@@ -216,6 +216,9 @@ public class Ticket {
             // Something must be wrong if the stored key not equals to decrypted one from the Internet
             if (deCryptedKey.isEmpty() || (!key.isEmpty() && !deCryptedKey.equals(key))) {
                 Utilities.log("Unable to decrypt the key!", true);
+                // Clear the expiration time (undo update)
+                storageEditor.putString(enCryptedKeyExpTimeAlias, "");
+                storageEditor.apply();
                 // Cache it, will eventually report to the cloud later
                 cachedLogs += Base64.encodeToString(serialNum, Base64.DEFAULT).trim() + "," + (int) (System.currentTimeMillis() / 1000) + ",-1," + LOG_TYPE_MALICIOUS + "\n";
                 throw new IOException("Unable to decrypt the key!");
@@ -478,7 +481,7 @@ public class Ticket {
     }
 
     private boolean commonChecks(byte[] serialNum, int cnt, int maxRide, int expectedCount, int checkinTime, int expTime, byte[] hmac, byte[] HMacData) {
-        String log = Base64.encodeToString(serialNum, Base64.DEFAULT).trim() + "," + (int) (System.currentTimeMillis() / 1000) + "," + remainingUses + "," + LOG_TYPE_MALICIOUS + "\n";
+        String log = Base64.encodeToString(serialNum, Base64.DEFAULT).trim() + "," + (int) (System.currentTimeMillis() / 1000) + ",-1," + LOG_TYPE_MALICIOUS + "\n";
 
         if (!checkHMac(hmac, HMacData)) {
             Utilities.log("Corrupted Ticket! Bad HMAC!", false);
@@ -581,28 +584,7 @@ public class Ticket {
 
     private boolean addLog(byte[] serialNum, int currentTime, int remainRide, int type) {
         cachedLogs += Base64.encodeToString(serialNum, Base64.DEFAULT).trim() + "," + currentTime + "," + remainRide + "," + type + "\n";
-        // Add logs to the cloud
-        try {
-            JSONObject jsonData = new JSONObject();
-            jsonData.put("password", PASSWORD);
-            jsonData.put("cachedLog", cachedLogs);
-            Callback cb = new Callback() {
-                @Override
-                public void onFailure(@NonNull Call call, IOException e) {
-                    e.printStackTrace();
-                }
-
-                @Override
-                public void onResponse(@NonNull Call call, Response response) {
-                    if (response.isSuccessful()) {
-                        cachedLogs = "";
-                    }
-                }
-            };
-            makePost(HOST + "logs", jsonData.toString(), cb);
-        } catch (JSONException e) {
-            e.printStackTrace();
-        }
+        logToCloud();
 
         byte[] log = new byte[SIZE_LOGS * 4];
         boolean res = utils.readPages(PAGE_LOGS, SIZE_LOGS, log, 0);
@@ -624,6 +606,30 @@ public class Ticket {
             return utils.writePages(newLog, 0, PAGE_LOGS + minIndex * SIZE_ONE_LOG, SIZE_ONE_LOG);
         }
         return false;
+    }
+
+    private void logToCloud() {
+        try {
+            JSONObject jsonData = new JSONObject();
+            jsonData.put("password", PASSWORD);
+            jsonData.put("cachedLog", cachedLogs);
+            Callback cb = new Callback() {
+                @Override
+                public void onFailure(@NonNull Call call, IOException e) {
+                    e.printStackTrace();
+                }
+
+                @Override
+                public void onResponse(@NonNull Call call, Response response) {
+                    if (response.isSuccessful()) {
+                        cachedLogs = "";
+                    }
+                }
+            };
+            makePost(HOST + "logs", jsonData.toString(), cb);
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
     }
 
     /**
@@ -657,7 +663,8 @@ public class Ticket {
         byte[] cardKey = getCardKey(serialNum);
         if (cardKey.length == 0) {
             Utilities.log("cardKey length is 0 in issue()", true);
-            infoToShow = "Failed to fetch key from the cloud, please check your internet Connection!";
+            infoToShow = "Something wrong with fetching key from the cloud!";
+            logToCloud();
             return false;
         }
 
@@ -726,6 +733,7 @@ public class Ticket {
 
             if (!commonChecks(serialNum, cnt, maxRide, expectedCount, checkinTime, expiryTime, hmac, HMacData)) {
                 infoToShow = "Corrupted Ticket!";
+                logToCloud();
                 return false;
             }
 
@@ -802,7 +810,8 @@ public class Ticket {
         byte[] cardKey = getCardKey(serialNum);
         if (cardKey.length == 0) {
             Utilities.log("cardKey length is 0 in use()", true);
-            infoToShow = "Failed to fetch key from the cloud, please check your internet Connection!";
+            infoToShow = "Something wrong with fetching key from the cloud!";
+            logToCloud();
             return false;
         }
 
@@ -852,6 +861,7 @@ public class Ticket {
 
         if (!commonChecks(serialNum, cnt, maxRide, expectedCount, checkinTime, expiryTime, hmac, HMacData)) {
             infoToShow = "Corrupted Ticket!";
+            logToCloud();
             return false;
         }
 
