@@ -276,7 +276,7 @@ public class Ticket {
      * After validation, get the number of remaining uses
      */
     public int getRemainingUses() {
-        return remainingUses;
+        return remainingUses - 1;
     }
 
     /**
