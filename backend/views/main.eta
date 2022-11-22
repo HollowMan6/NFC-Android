@@ -27,6 +27,13 @@
 <% } %>
 
 <h2 align="center">Logs</h2>
+<p>
+  <form align="center" action="/clear" method="post">
+    Keep last <input type="number" name="minute" value="2" min="0" max="99" /> minute logs
+    <input type="submit" value="Clear" />
+  </form>
+</p>
+
 <table align="center">
   <tr>
     <th>Identifier</th>

@@ -5,6 +5,7 @@ const router = new Router();
 
 router.get("/", mainController.showMain);
 router.post("/", mainController.showMain);
+router.post("/clear", mainController.clearLogs);
 router.get("/blocked", mainController.showBlocked);
 router.post("/blocked", mainController.showBlocked);
 router.post("/unblock", mainController.showUnblocked);

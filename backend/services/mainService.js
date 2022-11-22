@@ -37,4 +37,11 @@ const getLogs = async () => {
     return res.rows
 }
 
-export { getBlocked, blockCard, log, getLogs, unblockCard }
+const clearLogs = async (minute) => {
+    return await executeQuery(
+        "DELETE FROM logs WHERE timestamp < $timestamp",
+        { timestamp: Math.round(Date.now() / 1000) - minute * 60 },
+    )
+}
+
+export { getBlocked, blockCard, log, getLogs, clearLogs, unblockCard }

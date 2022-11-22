@@ -141,6 +141,18 @@ const showLogs = async ({ request, response }) => {
   }
 };
 
+const clearLogs = async ({ request, response }) => {
+  if (request.method === "POST") {
+    const body = request.body({ type: "form" });
+    const data = await body.value;
+    const minute = Number(data.get("minute"));
+    if (minute || minute === 0) {
+      await mainService.clearLogs(minute);
+    }
+    response.redirect("/");
+    return;
+  }
+};
 
 const showLoginForm = async ({ render, request, state, response }) => {
   const login = await state.session.get("login");
@@ -173,4 +185,4 @@ const processLogin = async ({ request, response, state, render }) => {
   response.redirect("/");
 }
 
-export { showMain, showBlocked, showLogs, showUnblocked, showLoginForm, processLogin };
+export { showMain, showBlocked, showLogs, clearLogs, showUnblocked, showLoginForm, processLogin };
