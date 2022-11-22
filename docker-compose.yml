@@ -3,13 +3,13 @@ version: "3.4"
 services:
   backend:
     build: backend
-    image: backend
+    image: android.azurecr.io/backend
     restart: "no"
     volumes:
       - ./backend/:/app
     command: /wait-for-it.sh database-server:5432 -- deno run --unstable --watch --allow-net --allow-read --allow-write --allow-env --no-check app.js
     ports:
-      - 8080:8080
+      - 80:80
     depends_on:
       - database
       - flyway

@@ -2,7 +2,7 @@ FROM denoland/deno:alpine
 
 RUN apk add --update bash
 
-EXPOSE 8080
+EXPOSE 80
 
 WORKDIR /app
 
