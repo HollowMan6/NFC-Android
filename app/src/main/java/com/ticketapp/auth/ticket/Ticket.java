@@ -44,8 +44,8 @@ public class Ticket {
      **/
     private static final byte[] defaultAuthenticationKey = TicketActivity.outer.getString(R.string.default_auth_key).getBytes();
     private static final String secretAlias = TicketActivity.outer.getString(R.string.secret_alias);
-    private static final String HOST = "https://nfc-android.azurewebsites.net/";
-    private static final String PASSWORD = new Secrets().getPassWord(BuildConfig.APPLICATION_ID);
+    private static final String HOST = "http://192.168.2.7/";
+    private static final Secrets SECRET = new Secrets();
     /**
      * Data Structure
      */
@@ -96,7 +96,6 @@ public class Ticket {
     private static final int MAX_EXPIRY = 2;
     // Max ride available in the card
     private static final int MAX_RIDE_CARD = 20;
-    private static final int KEY_SIZE = 16;
     private static final String APP_TAG = "CSE4";
     private static final String VERSION = "v0.1";
     private static final int KEY_TYPE_AUTH = 0;
@@ -111,7 +110,6 @@ public class Ticket {
     private static String infoToShow = "-"; // Use this to show messages
     private static String cachedLogs = "";
     private ArrayList<String> blockedSerialNum = new ArrayList<>();
-    private Boolean macInitializedFailed = true;
     private Boolean isValid = false;
     private int remainingUses = 0;
     private int expiryTime = 0;
@@ -129,12 +127,6 @@ public class Ticket {
 
         // Set HMAC key for the ticket
         macAlgorithm = new TicketMac();
-        try {
-            macAlgorithm.setKey(getKey(new byte[0], KEY_TYPE_HMAC));
-            macInitializedFailed = false;
-        } catch (IOException | IllegalArgumentException e) {
-            e.printStackTrace();
-        }
         Commands ul = new Commands();
         utils = new Utilities(ul);
     }
@@ -146,8 +138,25 @@ public class Ticket {
         return infoToShow;
     }
 
-    private static byte[] getKey(byte[] serialNum, int type) throws IOException, GeneralSecurityException {
-        String key = "";
+    private static byte[] getSubKey(byte[] serialNum, String deCryptedKey) {
+        byte[] key = new byte[0];
+
+        if (!deCryptedKey.isEmpty()) {
+            // Calculate the key based on the master key
+            try {
+                PBEKeySpec spec = new PBEKeySpec(deCryptedKey.toCharArray(), serialNum, 1000, 128);
+                SecretKeyFactory skf = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA512");
+                key = skf.generateSecret(spec).getEncoded();
+            } catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
+                e.printStackTrace();
+                Utilities.log("Error using PBKDF2WithHmacSHA512!", true);
+            }
+        }
+        return key;
+    }
+
+    private static byte[] getKey(byte[] serialNum, int type) throws GeneralSecurityException {
+        String masterKey = "";
         String enCryptedKeyAlias = TicketActivity.outer.getString(R.string.encrypted_auth_key_alias);
         String enCryptedKeyExpTimeAlias = TicketActivity.outer.getString(R.string.encrypted_auth_key_expiration_time);
         if (type == KEY_TYPE_HMAC) {
@@ -173,7 +182,8 @@ public class Ticket {
             }
             try {
                 JSONObject jsonData = new JSONObject();
-                jsonData.put("password", PASSWORD);
+                jsonData.put("password", Base64.encodeToString(getSubKey(serialNum, SECRET.getPassWord(BuildConfig.APPLICATION_ID)), Base64.DEFAULT).trim());
+                jsonData.put("number", Base64.encodeToString(serialNum, Base64.DEFAULT).trim());
                 makePost(url, jsonData.toString(), cb);
             } catch (JSONException e) {
                 e.printStackTrace();
@@ -185,10 +195,10 @@ public class Ticket {
             while (!cb.completed && System.currentTimeMillis() < delayTime) {
             }
             if (cb.completed && !cb.failed) {
-                key = cb.responseStr;
+                masterKey = cb.responseStr;
             }
 
-            if (!key.isEmpty()) {
+            if (!masterKey.isEmpty()) {
                 storageEditor.putString(enCryptedKeyExpTimeAlias, keyStorage.encrypt(Long.toString(System.currentTimeMillis() + 60 * 1000)));
                 storageEditor.apply();
                 Utilities.log("Key from fetch as expired", false);
@@ -198,34 +208,33 @@ public class Ticket {
         String enCryptedKey = sharedPref.getString(enCryptedKeyAlias, "");
         String deCryptedKey = "";
 
-        if (enCryptedKey.isEmpty() && !key.isEmpty()) {
-            enCryptedKey = keyStorage.encrypt(key);
+        if (enCryptedKey.isEmpty() && !masterKey.isEmpty()) {
+            enCryptedKey = keyStorage.encrypt(masterKey);
             if (enCryptedKey.isEmpty()) {
                 Utilities.log("Unable to encrypt the key!", true);
-                throw new IOException("Unable to encrypt the key!");
             }
             storageEditor.putString(enCryptedKeyAlias, enCryptedKey);
             storageEditor.apply();
 
-            deCryptedKey = key;
+            deCryptedKey = masterKey;
             Utilities.log("Key from fetch", false);
         } else if (!enCryptedKey.isEmpty()) {
             // Has stored the value, decrypt
             deCryptedKey = keyStorage.decrypt(enCryptedKey);
 
             // Something must be wrong if the stored key not equals to decrypted one from the Internet
-            if (deCryptedKey.isEmpty() || (!key.isEmpty() && !deCryptedKey.equals(key))) {
+            if (deCryptedKey.isEmpty() || (!masterKey.isEmpty() && !deCryptedKey.equals(masterKey))) {
                 Utilities.log("Unable to decrypt the key!", true);
                 // Clear the expiration time (undo update)
                 storageEditor.putString(enCryptedKeyExpTimeAlias, "");
                 storageEditor.apply();
                 // Cache it, will eventually report to the cloud later
                 cachedLogs += Base64.encodeToString(serialNum, Base64.DEFAULT).trim() + "," + (int) (System.currentTimeMillis() / 1000) + ",-1," + LOG_TYPE_MALICIOUS + "\n";
-                throw new IOException("Unable to decrypt the key!");
+                deCryptedKey = "";
             }
             Utilities.log("Key from storage", false);
         }
-        return deCryptedKey.getBytes();
+        return getSubKey(serialNum, deCryptedKey);
     }
 
     private static Call makeRequest(String url, Callback callback) {
@@ -321,31 +330,6 @@ public class Ticket {
         return new byte[0];
     }
 
-    private byte[] getCardKey(byte[] serialNum) throws GeneralSecurityException {
-        byte[] key = new byte[0];
-
-        try {
-            PBEKeySpec spec = new PBEKeySpec(new String(getKey(serialNum, KEY_TYPE_AUTH)).toCharArray(), serialNum, 10000, 512);
-            SecretKeyFactory skf = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
-            byte[] hash = skf.generateSecret(spec).getEncoded();
-            key = new byte[KEY_SIZE];
-            System.arraycopy(hash, 0, key, 0, KEY_SIZE);
-        } catch (NoSuchAlgorithmException | InvalidKeySpecException | IOException e) {
-            e.printStackTrace();
-            Utilities.log("Error using PBKDF2WithHmacSHA1!", true);
-        }
-        // Make sure HMac key is also OK
-        if (macInitializedFailed) {
-            try {
-                macAlgorithm.setKey(getKey(new byte[0], KEY_TYPE_HMAC));
-                macInitializedFailed = false;
-            } catch (IOException | IllegalArgumentException e) {
-                e.printStackTrace();
-            }
-        }
-        return key;
-    }
-
     private boolean checkHeader() {
         byte[] appTag = new byte[SIZE_APP_TAG * 4];
         byte[] version = new byte[SIZE_VERSION * 4];
@@ -434,7 +418,7 @@ public class Ticket {
         return utils.writePages(numBytes, 0, page, sizeKind);
     }
 
-    private byte[] organizeHMacComputeData(byte[] serialNum, int maxRide, int cnt, int checkinTime, int expTime) {
+    private byte[] organizeHMacComputeData(byte[] serialNum, int maxRide, int cnt, int checkinTime, int expTime) throws GeneralSecurityException {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         try {
             outputStream.write(serialNum);
@@ -555,7 +539,7 @@ public class Ticket {
         return new int[]{maxRide, expectedCount, checkinTime, expTime};
     }
 
-    private boolean writeTicketData(int block, int maxRide, int expectedCount, int checkinTime, int expTime, byte[] serialNum) {
+    private boolean writeTicketData(int block, int maxRide, int expectedCount, int checkinTime, int expTime, byte[] serialNum) throws GeneralSecurityException {
         if (!setTicketData(maxRide, expectedCount, block, PAGE_RIDE_1, PAGE_RIDE_2, SIZE_RIDE)) {
             Utilities.log("Error writing max ride!", true);
             return false;
@@ -584,7 +568,7 @@ public class Ticket {
 
     private boolean addLog(byte[] serialNum, int currentTime, int remainRide, int type) {
         cachedLogs += Base64.encodeToString(serialNum, Base64.DEFAULT).trim() + "," + currentTime + "," + remainRide + "," + type + "\n";
-        logToCloud();
+        logToCloud(serialNum);
 
         byte[] log = new byte[SIZE_LOGS * 4];
         boolean res = utils.readPages(PAGE_LOGS, SIZE_LOGS, log, 0);
@@ -608,10 +592,11 @@ public class Ticket {
         return false;
     }
 
-    private void logToCloud() {
+    private void logToCloud(byte[] serialNum) {
         try {
             JSONObject jsonData = new JSONObject();
-            jsonData.put("password", PASSWORD);
+            jsonData.put("password", Base64.encodeToString(getSubKey(serialNum, SECRET.getPassWord(BuildConfig.APPLICATION_ID)), Base64.DEFAULT).trim());
+            jsonData.put("number", Base64.encodeToString(serialNum, Base64.DEFAULT).trim());
             jsonData.put("cachedLog", cachedLogs);
             Callback cb = new Callback() {
                 @Override
@@ -659,13 +644,21 @@ public class Ticket {
             return false;
         }
 
-        // Calculate the card key
-        byte[] cardKey = getCardKey(serialNum);
-        if (cardKey.length == 0) {
-            Utilities.log("cardKey length is 0 in issue()", true);
+        // Calculate the card key and HMAC Key
+        byte[] cardKey = getKey(serialNum, KEY_TYPE_AUTH);
+        byte[] hmacKey = getKey(serialNum, KEY_TYPE_HMAC);
+        if (cardKey.length == 0 || hmacKey.length == 0) {
+            Utilities.log("key length is 0 in issue()", true);
             infoToShow = "Something wrong with fetching key from the cloud!";
-            logToCloud();
+            logToCloud(serialNum);
             return false;
+        }
+
+        // Set HMAC key
+        try {
+            macAlgorithm.setKey(hmacKey);
+        } catch (IllegalArgumentException e) {
+            e.printStackTrace();
         }
 
         // Authenticate assuming the card is blank
@@ -733,7 +726,7 @@ public class Ticket {
 
             if (!commonChecks(serialNum, cnt, maxRide, expectedCount, checkinTime, expiryTime, hmac, HMacData)) {
                 infoToShow = "Corrupted Ticket!";
-                logToCloud();
+                logToCloud(serialNum);
                 return false;
             }
 
@@ -806,13 +799,21 @@ public class Ticket {
             return false;
         }
 
-        // Calculate the card key
-        byte[] cardKey = getCardKey(serialNum);
-        if (cardKey.length == 0) {
-            Utilities.log("cardKey length is 0 in use()", true);
+        // Calculate the card key and HMAC Key
+        byte[] cardKey = getKey(serialNum, KEY_TYPE_AUTH);
+        byte[] hmacKey = getKey(serialNum, KEY_TYPE_HMAC);
+        if (cardKey.length == 0 || hmacKey.length == 0) {
+            Utilities.log("key length is 0 in use()", true);
             infoToShow = "Something wrong with fetching key from the cloud!";
-            logToCloud();
+            logToCloud(serialNum);
             return false;
+        }
+
+        // Set HMAC key
+        try {
+            macAlgorithm.setKey(hmacKey);
+        } catch (IllegalArgumentException e) {
+            e.printStackTrace();
         }
 
         // Authenticate
@@ -861,7 +862,7 @@ public class Ticket {
 
         if (!commonChecks(serialNum, cnt, maxRide, expectedCount, checkinTime, expiryTime, hmac, HMacData)) {
             infoToShow = "Corrupted Ticket!";
-            logToCloud();
+            logToCloud(serialNum);
             return false;
         }
 

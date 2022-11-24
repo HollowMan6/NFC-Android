@@ -33,15 +33,17 @@ Hide Secret:
 - 5 -> version
 
 #### 2 ticket blocks
-- 6 -> max ride number (counter limit), expected counter
-- 7 -> last check-in time
-- 8 -> expiration time
-- 9 -> hmac
+- 6 -> max ride number (counter limit)
+- 7 -> initial counter, expected counter
+- 8 -> last check-in time
+- 9 -> expiration time
+- 10 -> hmac
 ---
-- 10 -> max ride number (counter limit), expected counter
-- 11 -> last check-in time
-- 12 -> expiration time
-- 13 -> hmac
+- 11 -> max ride number (counter limit)
+- 12 -> initial counter, expected counter
+- 13 -> last check-in time
+- 14 -> expiration time
+- 15 -> hmac
 
 #### Logs block
 - 34,35 -> timestamp, remaining ride, type
