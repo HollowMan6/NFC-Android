@@ -101,15 +101,15 @@ public class Ticket {
 
     private byte[] getCardKey(byte[] serialNum) {
         byte[] key = new byte[0];
-        PBEKeySpec spec = new PBEKeySpec(new String(authenticationKey).toCharArray(), serialNum, 10000, 512);
+        PBEKeySpec spec = new PBEKeySpec(new String(authenticationKey).toCharArray(), serialNum, 1000, 128);
         try {
-            SecretKeyFactory skf = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
+            SecretKeyFactory skf = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA512");
             byte[] hash = skf.generateSecret(spec).getEncoded();
             key = new byte[KEY_SIZE];
             System.arraycopy(hash, 0, key, 0, KEY_SIZE);
         } catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
             e.printStackTrace();
-            Utilities.log("Error using PBKDF2WithHmacSHA1!", true);
+            Utilities.log("Error using PBKDF2WithHmacSHA512!", true);
         }
         return key;
     }
