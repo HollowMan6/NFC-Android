@@ -1,6 +1,9 @@
 # NFC-Android-Backend
+
+Deployed at: https://nfc-android.azurewebsites.net/
+
 ## Login Token
-l54G*b,_Qtm85qo/Js&ec809@sZ2A$
+sR3~8YAqs}jZaDqp
 
 ## Build
 ```bash

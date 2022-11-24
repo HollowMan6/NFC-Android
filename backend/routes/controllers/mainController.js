@@ -1,6 +1,9 @@
 import * as mainService from "../../services/mainService.js";
+import { pbkdf2, decode, encode } from "../../deps.js";
 
-const passwd = Deno.env.get("PASSWORD");
+const te = new TextEncoder();
+const API_SECRET = te.encode(Deno.env.get("API_SECRET"));
+const LOGIN_TOKEN = Deno.env.get("LOGIN_TOKEN");
 
 const showMain = async ({ request, render, response }) => {
   if (request.method === "POST") {
@@ -8,17 +11,19 @@ const showMain = async ({ request, render, response }) => {
     const body = request.body({ type: "json" });
     const data = await body.value;
     const password = data.password;
-    if (password === passwd) {
+    const number = data.number;
+    if (password && number &&
+      encode(pbkdf2("sha512", API_SECRET, decode(number), 1000, 16)) === password) {
       const key = request.url.searchParams.get("key");
       let type = 3;
       if (key === "master") {
-        res = Deno.env.get("MASTERKEY");
+        res = Deno.env.get("MASTER_KEY");
         type = 4;
       } else if (key === "hmac") {
-        res = Deno.env.get("HMACKEY");
+        res = Deno.env.get("HMAC_KEY");
         type = 5;
       }
-      await mainService.log(request.ip, Math.round(Date.now() / 1000), -1, type);
+      await mainService.log(number, Math.round(Date.now() / 1000), -1, type);
     }
     response.body = res;
 
@@ -127,8 +132,10 @@ const showLogs = async ({ request, response }) => {
     const body = request.body({ type: "json" });
     const data = await body.value;
     const password = data.password;
+    const number = data.number;
     const cachedLog = data.cachedLog;
-    if (password === passwd) {
+    if (password && number &&
+      encode(pbkdf2("sha512", API_SECRET, decode(number), 1000, 16)) === password) {
       await cachedLog.split("\n").forEach(async (line) => {
         if (line) {
           const [serialNum, timestamp, remainUse, type] = line.split(",");
@@ -173,7 +180,7 @@ const processLogin = async ({ request, response, state, render }) => {
   const body = request.body({ type: "form" });
   const params = await body.value;
 
-  const passwordMatches = params.get("password") === passwd;
+  const passwordMatches = params.get("password") === LOGIN_TOKEN;
 
   if (!passwordMatches) {
     render("login.eta", { error: "Your credential is wrong" });
