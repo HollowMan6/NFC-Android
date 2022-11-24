@@ -44,7 +44,7 @@ public class Ticket {
      **/
     private static final byte[] defaultAuthenticationKey = TicketActivity.outer.getString(R.string.default_auth_key).getBytes();
     private static final String secretAlias = TicketActivity.outer.getString(R.string.secret_alias);
-    private static final String HOST = "http://192.168.2.7/";
+    private static final String HOST = "https://nfc-android.azurewebsites.net/";
     private static final Secrets SECRET = new Secrets();
     /**
      * Data Structure
@@ -55,17 +55,20 @@ public class Ticket {
     private static final int SIZE_APP_TAG = 1;
     private static final int PAGE_VERSION = 5;
     private static final int SIZE_VERSION = 1;
-    private static final int PAGE_RIDE_1 = 6;
-    private static final int PAGE_RIDE_2 = 10;
-    private static final int SIZE_RIDE = 1;
-    private static final int PAGE_CHECK_TIME_1 = 7;
-    private static final int PAGE_CHECK_TIME_2 = 11;
+    private static final int PAGE_MAX_RIDE_1 = 6;
+    private static final int PAGE_MAX_RIDE_2 = 11;
+    private static final int SIZE_MAX_RIDE = 1;
+    private static final int PAGE_CNT_DATA_1 = 7;
+    private static final int PAGE_CNT_DATA_2 = 12;
+    private static final int SIZE_CNT_DATA = 1;
+    private static final int PAGE_CHECK_TIME_1 = 8;
+    private static final int PAGE_CHECK_TIME_2 = 13;
     private static final int SIZE_CHECK_TIME = 1;
-    private static final int PAGE_EXP_TIME_1 = 8;
-    private static final int PAGE_EXP_TIME_2 = 12;
+    private static final int PAGE_EXP_TIME_1 = 9;
+    private static final int PAGE_EXP_TIME_2 = 14;
     private static final int SIZE_EXP_TIME = 1;
-    private static final int PAGE_HMAC_1 = 9;
-    private static final int PAGE_HMAC_2 = 13;
+    private static final int PAGE_HMAC_1 = 10;
+    private static final int PAGE_HMAC_2 = 15;
     private static final int SIZE_HMAC = 1;
     private static final int PAGE_COUNTER = 41;
     private static final int SIZE_COUNTER = 1;
@@ -79,11 +82,11 @@ public class Ticket {
      * Logging
      */
     private static final int LOG_TYPE_ISSUE = 0;
-    private static final int LOG_TYPE_TOPUP = 1;
+    private static final int LOG_TYPE_TOP_UP = 1;
     private static final int LOG_TYPE_USE = 2;
     private static final int LOG_TYPE_MALICIOUS = 3;
-    private static final int NUM_LOG = 3;
-    private static final int SIZE_ONE_LOG = SIZE_CHECK_TIME + SIZE_RIDE;
+    private static final int NUM_LOG = 5;
+    private static final int SIZE_ONE_LOG = SIZE_CHECK_TIME + SIZE_MAX_RIDE;
     private static final int SIZE_LOGS = SIZE_ONE_LOG * NUM_LOG;
     private static final int PAGE_LOGS = PAGE_COUNTER - 1 - SIZE_LOGS;
     /**
@@ -138,13 +141,13 @@ public class Ticket {
         return infoToShow;
     }
 
-    private static byte[] getSubKey(byte[] serialNum, String deCryptedKey) {
+    private static byte[] getSubKey(byte[] serialNum, String decryptedKey) {
         byte[] key = new byte[0];
 
-        if (!deCryptedKey.isEmpty()) {
+        if (!decryptedKey.isEmpty()) {
             // Calculate the key based on the master key
             try {
-                PBEKeySpec spec = new PBEKeySpec(deCryptedKey.toCharArray(), serialNum, 1000, 128);
+                PBEKeySpec spec = new PBEKeySpec(decryptedKey.toCharArray(), serialNum, 1000, 128);
                 SecretKeyFactory skf = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA512");
                 key = skf.generateSecret(spec).getEncoded();
             } catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
@@ -157,23 +160,23 @@ public class Ticket {
 
     private static byte[] getKey(byte[] serialNum, int type) throws GeneralSecurityException {
         String masterKey = "";
-        String enCryptedKeyAlias = TicketActivity.outer.getString(R.string.encrypted_auth_key_alias);
-        String enCryptedKeyExpTimeAlias = TicketActivity.outer.getString(R.string.encrypted_auth_key_expiration_time);
+        String encryptedKeyAlias = TicketActivity.outer.getString(R.string.encrypted_auth_key_alias);
+        String encryptedKeyExpTimeAlias = TicketActivity.outer.getString(R.string.encrypted_auth_key_expiration_time);
         if (type == KEY_TYPE_HMAC) {
-            enCryptedKeyAlias = TicketActivity.outer.getString(R.string.encrypted_hmac_key_alias);
-            enCryptedKeyExpTimeAlias = TicketActivity.outer.getString(R.string.encrypted_hmac_key_expiration_time);
+            encryptedKeyAlias = TicketActivity.outer.getString(R.string.encrypted_hmac_key_alias);
+            encryptedKeyExpTimeAlias = TicketActivity.outer.getString(R.string.encrypted_hmac_key_expiration_time);
         }
 
-        String enCryptedKeyExpTime = sharedPref.getString(enCryptedKeyExpTimeAlias, "");
+        String encryptedKeyExpTime = sharedPref.getString(encryptedKeyExpTimeAlias, "");
         long keyExpTime = 0;
-        if (!enCryptedKeyExpTime.isEmpty()) {
+        if (!encryptedKeyExpTime.isEmpty()) {
             SimpleDateFormat simpleDateFormat = new SimpleDateFormat("dd/MM/yyyy' 'HH:mm:ss");
-            keyExpTime = Long.parseLong(keyStorage.decrypt(enCryptedKeyExpTime));
+            keyExpTime = Long.parseLong(keyStorage.decrypt(encryptedKeyExpTime));
             Timestamp timestamp = new Timestamp(keyExpTime);
             Utilities.log("Key expired time: " + simpleDateFormat.format(timestamp), false);
         }
 
-        if (enCryptedKeyExpTime.isEmpty() || keyExpTime < System.currentTimeMillis()) {
+        if (encryptedKeyExpTime.isEmpty() || keyExpTime < System.currentTimeMillis()) {
             // Fetch the keys from cloud
             HTTPCallback cb = new HTTPCallback();
             String url = HOST + "?key=master";
@@ -199,42 +202,42 @@ public class Ticket {
             }
 
             if (!masterKey.isEmpty()) {
-                storageEditor.putString(enCryptedKeyExpTimeAlias, keyStorage.encrypt(Long.toString(System.currentTimeMillis() + 60 * 1000)));
+                storageEditor.putString(encryptedKeyExpTimeAlias, keyStorage.encrypt(Long.toString(System.currentTimeMillis() + 60 * 1000)));
                 storageEditor.apply();
                 Utilities.log("Key from fetch as expired", false);
             }
         }
 
-        String enCryptedKey = sharedPref.getString(enCryptedKeyAlias, "");
-        String deCryptedKey = "";
+        String encryptedKey = sharedPref.getString(encryptedKeyAlias, "");
+        String decryptedKey = "";
 
-        if (enCryptedKey.isEmpty() && !masterKey.isEmpty()) {
-            enCryptedKey = keyStorage.encrypt(masterKey);
-            if (enCryptedKey.isEmpty()) {
+        if (encryptedKey.isEmpty() && !masterKey.isEmpty()) {
+            encryptedKey = keyStorage.encrypt(masterKey);
+            if (encryptedKey.isEmpty()) {
                 Utilities.log("Unable to encrypt the key!", true);
             }
-            storageEditor.putString(enCryptedKeyAlias, enCryptedKey);
+            storageEditor.putString(encryptedKeyAlias, encryptedKey);
             storageEditor.apply();
 
-            deCryptedKey = masterKey;
+            decryptedKey = masterKey;
             Utilities.log("Key from fetch", false);
-        } else if (!enCryptedKey.isEmpty()) {
+        } else if (!encryptedKey.isEmpty()) {
             // Has stored the value, decrypt
-            deCryptedKey = keyStorage.decrypt(enCryptedKey);
+            decryptedKey = keyStorage.decrypt(encryptedKey);
 
             // Something must be wrong if the stored key not equals to decrypted one from the Internet
-            if (deCryptedKey.isEmpty() || (!masterKey.isEmpty() && !deCryptedKey.equals(masterKey))) {
+            if (decryptedKey.isEmpty() || (!masterKey.isEmpty() && !decryptedKey.equals(masterKey))) {
                 Utilities.log("Unable to decrypt the key!", true);
                 // Clear the expiration time (undo update)
-                storageEditor.putString(enCryptedKeyExpTimeAlias, "");
+                storageEditor.putString(encryptedKeyExpTimeAlias, "");
                 storageEditor.apply();
                 // Cache it, will eventually report to the cloud later
                 cachedLogs += Base64.encodeToString(serialNum, Base64.DEFAULT).trim() + "," + (int) (System.currentTimeMillis() / 1000) + ",-1," + LOG_TYPE_MALICIOUS + "\n";
-                deCryptedKey = "";
+                decryptedKey = "";
             }
             Utilities.log("Key from storage", false);
         }
-        return getSubKey(serialNum, deCryptedKey);
+        return getSubKey(serialNum, decryptedKey);
     }
 
     private static Call makeRequest(String url, Callback callback) {
@@ -418,13 +421,14 @@ public class Ticket {
         return utils.writePages(numBytes, 0, page, sizeKind);
     }
 
-    private byte[] organizeHMacComputeData(byte[] serialNum, int maxRide, int cnt, int checkinTime, int expTime) throws GeneralSecurityException {
+    private byte[] organizeHMacComputeData(byte[] serialNum, int maxRide, int initCnt, int cnt, int checkInTime, int expTime) {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         try {
             outputStream.write(serialNum);
             outputStream.write(maxRide);
+            outputStream.write(initCnt);
             outputStream.write(cnt);
-            outputStream.write(checkinTime);
+            outputStream.write(checkInTime);
             outputStream.write(expTime);
         } catch (IOException e) {
             e.printStackTrace();
@@ -464,7 +468,7 @@ public class Ticket {
         return Arrays.equals(hmac, hmacShortedCalculated);
     }
 
-    private boolean commonChecks(byte[] serialNum, int cnt, int maxRide, int expectedCount, int checkinTime, int expTime, byte[] hmac, byte[] HMacData) {
+    private boolean commonChecks(byte[] serialNum, int cnt, int maxRide, int initCnt, int expectedCount, int checkInTime, int expTime, byte[] hmac, byte[] HMacData) {
         String log = Base64.encodeToString(serialNum, Base64.DEFAULT).trim() + "," + (int) (System.currentTimeMillis() / 1000) + ",-1," + LOG_TYPE_MALICIOUS + "\n";
 
         if (!checkHMac(hmac, HMacData)) {
@@ -493,8 +497,15 @@ public class Ticket {
             return false;
         }
 
-        if (checkinTime - (int) (System.currentTimeMillis() / 1000) > 0) {
-            Utilities.log("Unreasonable checkin time!", true);
+        if (checkInTime - (int) (System.currentTimeMillis() / 1000) > 0) {
+            Utilities.log("Unreasonable check in time!", true);
+            // Cache it, will eventually report to the cloud later
+            cachedLogs += log;
+            return false;
+        }
+
+        if (expTime == 0 && initCnt != cnt) {
+            Utilities.log("Not first use but the expiry time is 0!", true);
             // Cache it, will eventually report to the cloud later
             cachedLogs += log;
             return false;
@@ -512,10 +523,16 @@ public class Ticket {
     }
 
     private int[] readTicketData(int block) throws IOException {
-        int[] value = getTicketDataTwo(block, PAGE_RIDE_1, PAGE_RIDE_2, SIZE_RIDE);
-        int maxRide = value[0];
+        int maxRide = getTicketData(block, PAGE_MAX_RIDE_1, PAGE_MAX_RIDE_2, SIZE_MAX_RIDE);
         if (maxRide == -1) {
             Utilities.log("Error reading maxRide!", true);
+            throw new IOException();
+        }
+
+        int[] value = getTicketDataTwo(block, PAGE_CNT_DATA_1, PAGE_CNT_DATA_2, SIZE_CNT_DATA);
+        int initCnt = value[0];
+        if (initCnt == -1) {
+            Utilities.log("Error reading initial counter!", true);
             throw new IOException();
         }
 
@@ -525,8 +542,8 @@ public class Ticket {
             throw new IOException();
         }
 
-        int checkinTime = getTicketData(block, PAGE_CHECK_TIME_1, PAGE_CHECK_TIME_2, SIZE_CHECK_TIME);
-        if (checkinTime == -1) {
+        int checkInTime = getTicketData(block, PAGE_CHECK_TIME_1, PAGE_CHECK_TIME_2, SIZE_CHECK_TIME);
+        if (checkInTime == -1) {
             Utilities.log("Error reading check in time!", true);
             throw new IOException();
         }
@@ -536,16 +553,21 @@ public class Ticket {
             Utilities.log("Error reading expiry time!", true);
             throw new IOException();
         }
-        return new int[]{maxRide, expectedCount, checkinTime, expTime};
+        return new int[]{maxRide, initCnt, expectedCount, checkInTime, expTime};
     }
 
-    private boolean writeTicketData(int block, int maxRide, int expectedCount, int checkinTime, int expTime, byte[] serialNum) throws GeneralSecurityException {
-        if (!setTicketData(maxRide, expectedCount, block, PAGE_RIDE_1, PAGE_RIDE_2, SIZE_RIDE)) {
+    private boolean writeTicketData(int block, int maxRide, int initCnt, int expectedCount, int checkInTime, int expTime, byte[] serialNum) {
+        if (!setTicketData(maxRide, block, PAGE_MAX_RIDE_1, PAGE_MAX_RIDE_2, SIZE_MAX_RIDE)) {
             Utilities.log("Error writing max ride!", true);
             return false;
         }
 
-        if (!setTicketData(checkinTime, block, PAGE_CHECK_TIME_1, PAGE_CHECK_TIME_2, SIZE_CHECK_TIME)) {
+        if (!setTicketData(initCnt, expectedCount, block, PAGE_CNT_DATA_1, PAGE_CNT_DATA_2, SIZE_CNT_DATA)) {
+            Utilities.log("Error writing counter data!", true);
+            return false;
+        }
+
+        if (!setTicketData(checkInTime, block, PAGE_CHECK_TIME_1, PAGE_CHECK_TIME_2, SIZE_CHECK_TIME)) {
             Utilities.log("Error writing check in time!", true);
             return false;
         }
@@ -555,7 +577,7 @@ public class Ticket {
             return false;
         }
 
-        byte[] writeData = organizeHMacComputeData(serialNum, maxRide, expectedCount, checkinTime, expiryTime);
+        byte[] writeData = organizeHMacComputeData(serialNum, maxRide, initCnt, expectedCount, checkInTime, expiryTime);
 
         if (!setHMac(writeData, block)) {
             Utilities.log("Error writing HMAC!", true);
@@ -586,7 +608,7 @@ public class Ticket {
             }
             byte[] newLog = new byte[SIZE_ONE_LOG * 4];
             System.arraycopy(toByteArray(currentTime), 0, newLog, 0, SIZE_CHECK_TIME * 4);
-            System.arraycopy(twoToByteArray(remainRide, type), 0, newLog, SIZE_CHECK_TIME * 4, SIZE_RIDE * 4);
+            System.arraycopy(twoToByteArray(remainRide, type), 0, newLog, SIZE_CHECK_TIME * 4, SIZE_MAX_RIDE * 4);
             return utils.writePages(newLog, 0, PAGE_LOGS + minIndex * SIZE_ONE_LOG, SIZE_ONE_LOG);
         }
         return false;
@@ -700,8 +722,7 @@ public class Ticket {
         int block = cnt % 2;
         int maxRide = uses + cnt;
         remainingUses = uses;
-        int expectedCount = cnt;
-        int checkinTime = 0;
+        int checkInTime = 0;
 
         /** Read data if not first time */
         if (!firstTime) {
@@ -713,24 +734,25 @@ public class Ticket {
             }
 
             maxRide = readData[0];
-            expectedCount = readData[1];
-            checkinTime = readData[2];
-            expiryTime = readData[3];
+            int initCnt = readData[1];
+            int expectedCount = readData[2];
+            checkInTime = readData[3];
+            expiryTime = readData[4];
 
-            byte[] HMacData = organizeHMacComputeData(serialNum, maxRide, cnt, checkinTime, expiryTime);
+            byte[] HMacData = organizeHMacComputeData(serialNum, maxRide, initCnt, cnt, checkInTime, expiryTime);
             byte[] hmac = getHMac(block);
             if (hmac.length == 0) {
                 Utilities.log("Error reading HMac in issue()!", true);
                 return false;
             }
 
-            if (!commonChecks(serialNum, cnt, maxRide, expectedCount, checkinTime, expiryTime, hmac, HMacData)) {
+            if (!commonChecks(serialNum, cnt, maxRide, initCnt, expectedCount, checkInTime, expiryTime, hmac, HMacData)) {
                 infoToShow = "Corrupted Ticket!";
                 logToCloud(serialNum);
                 return false;
             }
 
-            if (expiryTime != 0 && expiryTime < (int) (System.currentTimeMillis() / 1000)) {
+            if (initCnt != cnt && expiryTime < (int) (System.currentTimeMillis() / 1000)) {
                 Utilities.log("Ticket expired! Clear the remaining rides.", false);
                 maxRide = cnt;
             }
@@ -760,12 +782,12 @@ public class Ticket {
 
         expiryTime = 0;
 
-        if (!writeTicketData(block, maxRide, expectedCount, checkinTime, expiryTime, serialNum)) {
+        if (!writeTicketData(block, maxRide, cnt, cnt, checkInTime, expiryTime, serialNum)) {
             return false;
         }
 
         infoToShow = "Ticket updated with " + uses + " more rides! Now " + remainingUses;
-        int actionType = LOG_TYPE_TOPUP;
+        int actionType = LOG_TYPE_TOP_UP;
         if (firstTime) {
             infoToShow = "Ticket issued with " + remainingUses + " rides!";
             actionType = LOG_TYPE_ISSUE;
@@ -849,24 +871,30 @@ public class Ticket {
         }
 
         int maxRide = readData[0];
-        int expectedCount = readData[1];
-        int checkinTime = readData[2];
-        expiryTime = readData[3];
+        int initCnt = readData[1];
+        int expectedCount = readData[2];
+        int checkInTime = readData[3];
+        expiryTime = readData[4];
 
-        byte[] HMacData = organizeHMacComputeData(serialNum, maxRide, cnt, checkinTime, expiryTime);
+        byte[] HMacData = organizeHMacComputeData(serialNum, maxRide, initCnt, cnt, checkInTime, expiryTime);
         byte[] hmac = getHMac(block);
         if (hmac.length == 0) {
             Utilities.log("Error reading HMac in use()!", true);
             return false;
         }
 
-        if (!commonChecks(serialNum, cnt, maxRide, expectedCount, checkinTime, expiryTime, hmac, HMacData)) {
+        if (!commonChecks(serialNum, cnt, maxRide, initCnt, expectedCount, checkInTime, expiryTime, hmac, HMacData)) {
             infoToShow = "Corrupted Ticket!";
             logToCloud(serialNum);
             return false;
         }
 
-        if (expiryTime != 0 && System.currentTimeMillis() / 1000 > expiryTime) {
+        if (initCnt == cnt) {
+            // TODO: Change the expiry time to be in days
+            expiryTime = (int) (System.currentTimeMillis() / 1000) + MAX_EXPIRY * 60;
+        }
+
+        if (System.currentTimeMillis() / 1000 > expiryTime) {
             Utilities.log("Ticket expired in use()!", true);
             infoToShow = "Ticket expired!";
             return false;
@@ -878,7 +906,7 @@ public class Ticket {
             return false;
         }
 
-        if (checkinTime + CHECK_DELAY > System.currentTimeMillis() / 1000) {
+        if (checkInTime + CHECK_DELAY > System.currentTimeMillis() / 1000) {
             Utilities.log("Check in time is less than the delay in use()!", true);
             infoToShow = "Ticket used too fast!";
             return false;
@@ -887,14 +915,10 @@ public class Ticket {
         /** Write new ticket */
         block = (block + 1) % 2;
         expectedCount = cnt + 1;
-        checkinTime = (int) (System.currentTimeMillis() / 1000);
-        if (expiryTime == 0) {
-            // TODO: Change the expiry time to be in days
-            expiryTime = checkinTime + MAX_EXPIRY * 60;
-        }
+        checkInTime = (int) (System.currentTimeMillis() / 1000);
         remainingUses = maxRide - cnt - 1;
 
-        if (!writeTicketData(block, maxRide, expectedCount, checkinTime, expiryTime, serialNum)) {
+        if (!writeTicketData(block, maxRide, initCnt, expectedCount, checkInTime, expiryTime, serialNum)) {
             return false;
         }
 
@@ -904,7 +928,7 @@ public class Ticket {
             return false;
         }
 
-        if (!addLog(serialNum, checkinTime, remainingUses, LOG_TYPE_USE)) {
+        if (!addLog(serialNum, checkInTime, remainingUses, LOG_TYPE_USE)) {
             Utilities.log("Error writing log in use()!", true);
             // Forget about the log if it fails
         }
