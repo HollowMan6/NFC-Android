@@ -192,8 +192,8 @@ public class Ticket {
                 e.printStackTrace();
             }
 
-            // Allow maximum delay of 1 second
-            long delayTime = System.currentTimeMillis() + 1000;
+            // Allow maximum delay of 3 second
+            long delayTime = System.currentTimeMillis() + 3000;
             // Wait to be available
             while (!cb.completed && System.currentTimeMillis() < delayTime) {
             }
