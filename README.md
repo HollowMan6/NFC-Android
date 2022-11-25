@@ -2,6 +2,8 @@
 
 Deployed at: https://nfc-android.azurewebsites.net/
 
+Start locally by `docker compose up`, then visit http://localhost/
+
 ## Login Token
 sR3~8YAqs}jZaDqp
 

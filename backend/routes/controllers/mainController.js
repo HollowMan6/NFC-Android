@@ -1,5 +1,5 @@
 import * as mainService from "../../services/mainService.js";
-import { pbkdf2, decode, encode } from "../../deps.js";
+import { pbkdf2, decode, encode, concat } from "../../deps.js";
 
 const te = new TextEncoder();
 const API_SECRET = te.encode(Deno.env.get("API_SECRET"));
@@ -12,8 +12,10 @@ const showMain = async ({ request, render, response }) => {
     const data = await body.value;
     const password = data.password;
     const number = data.number;
-    if (password && number &&
-      encode(pbkdf2("sha512", API_SECRET, decode(number), 1000, 16)) === password) {
+    const time = Number(data.time);
+    if (password && number && time && time + 5000 > Date.now() &&
+      !(await mainService.getBlocked()).some((card) => card.serialnum === number) &&
+      encode(pbkdf2("sha512", API_SECRET, concat(decode(number), te.encode(data.time)), 1000, 16)) === password) {
       const key = request.url.searchParams.get("key");
       let type = 3;
       if (key === "master") {
@@ -24,10 +26,9 @@ const showMain = async ({ request, render, response }) => {
         type = 5;
       }
       await mainService.log(number, Math.round(Date.now() / 1000), -1, type);
+      response.body = res;
+      return;
     }
-    response.body = res;
-
-    return;
   } else if (request.method === "GET") {
     const statData = {
       logs: [],
@@ -85,6 +86,7 @@ const showMain = async ({ request, render, response }) => {
     render("main.eta", statData);
     return;
   }
+  response.status = 400;
 };
 
 const showBlocked = async ({ request, response }) => {
@@ -109,6 +111,7 @@ const showBlocked = async ({ request, response }) => {
     response.redirect("/");
     return;
   }
+  response.status = 400;
 };
 
 const showUnblocked = async ({ request, response }) => {
@@ -124,28 +127,29 @@ const showUnblocked = async ({ request, response }) => {
     response.redirect("/");
     return;
   }
+  response.status = 400;
 };
 
 const showLogs = async ({ request, response }) => {
   if (request.method === "POST") {
-    let res = "";
     const body = request.body({ type: "json" });
     const data = await body.value;
     const password = data.password;
     const number = data.number;
+    const time = Number(data.time);
     const cachedLog = data.cachedLog;
-    if (password && number &&
-      encode(pbkdf2("sha512", API_SECRET, decode(number), 1000, 16)) === password) {
+    if (cachedLog && password && number && time && time + 5000 > Date.now() &&
+      encode(pbkdf2("sha512", API_SECRET, concat(decode(number), te.encode(data.time), te.encode(cachedLog)), 1000, 16)) === password) {
       await cachedLog.split("\n").forEach(async (line) => {
         if (line) {
           const [serialNum, timestamp, remainUse, type] = line.split(",");
           await mainService.log(serialNum, Number(timestamp), Number(remainUse), Number(type));
         }
       });
+      return;
     }
-    response.body = res;
-    return;
   }
+  response.status = 400;
 };
 
 const clearLogs = async ({ request, response }) => {
@@ -159,6 +163,7 @@ const clearLogs = async ({ request, response }) => {
     response.redirect("/");
     return;
   }
+  response.status = 400;
 };
 
 const showLoginForm = async ({ render, request, state, response }) => {
