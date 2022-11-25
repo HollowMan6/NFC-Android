@@ -13,7 +13,7 @@ const showMain = async ({ request, render, response }) => {
     const password = data.password;
     const number = data.number;
     const time = Number(data.time);
-    if (password && number && time && time + 5000 > Date.now() &&
+    if (password && number && time && time + 5000 > Date.now() && time < Date.now() + 5000 &&
       !(await mainService.getBlocked()).some((card) => card.serialnum === number) &&
       encode(pbkdf2("sha512", API_SECRET, concat(decode(number), te.encode(data.time)), 1000, 16)) === password) {
       const key = request.url.searchParams.get("key");
@@ -138,7 +138,7 @@ const showLogs = async ({ request, response }) => {
     const number = data.number;
     const time = Number(data.time);
     const cachedLog = data.cachedLog;
-    if (cachedLog && password && number && time && time + 5000 > Date.now() &&
+    if (cachedLog && password && number && time && time + 5000 > Date.now() && time < Date.now() + 5000 &&
       encode(pbkdf2("sha512", API_SECRET, concat(decode(number), te.encode(data.time), te.encode(cachedLog)), 1000, 16)) === password) {
       await cachedLog.split("\n").forEach(async (line) => {
         if (line) {
@@ -146,6 +146,7 @@ const showLogs = async ({ request, response }) => {
           await mainService.log(serialNum, Number(timestamp), Number(remainUse), Number(type));
         }
       });
+      response.body = "";
       return;
     }
   }
