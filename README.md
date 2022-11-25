@@ -16,7 +16,7 @@ Hide Secret:
 - [X] Issue tickets with constant number of rides (5).
 - [X] Validate the ticket (check expiry time and remaining rides, decrement remaining rides).
 - [X] The tickets are valid for a certain time (normally one day, use 2 minute for testing) from the time when they were issued.
-- [X] Start the validity period only when the ticket is used for the first time (if initial counter value is 0, set expiry time).
+- [X] Start the validity period only when the ticket is used for the first time (if initial counter value equals to the current counter value, set expiry time).
 - [X] If the tickets have expired or they have been fully used, reformat the card and issue a new ticket.
 - [X] Issue additional rides (+5) to a card without erasing any still valid ticket.
 - [X] Move the master-key to the Android keystore instead of in an XML file on the reader device.

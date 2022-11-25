@@ -141,13 +141,13 @@ public class Ticket {
         return infoToShow;
     }
 
-    private static byte[] getSubKey(byte[] serialNum, String decryptedKey) {
+    private static byte[] getSubKey(byte[] salt, String decryptedKey) {
         byte[] key = new byte[0];
 
         if (!decryptedKey.isEmpty()) {
             // Calculate the key based on the master key
             try {
-                PBEKeySpec spec = new PBEKeySpec(decryptedKey.toCharArray(), serialNum, 1000, 128);
+                PBEKeySpec spec = new PBEKeySpec(decryptedKey.toCharArray(), salt, 1000, 128);
                 SecretKeyFactory skf = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA512");
                 key = skf.generateSecret(spec).getEncoded();
             } catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
@@ -185,8 +185,14 @@ public class Ticket {
             }
             try {
                 JSONObject jsonData = new JSONObject();
-                jsonData.put("password", Base64.encodeToString(getSubKey(serialNum, SECRET.getPassWord(BuildConfig.APPLICATION_ID)), Base64.DEFAULT).trim());
+                long timestamp = System.currentTimeMillis();
+                byte[] timestampByte = Long.toString(timestamp).getBytes();
+                byte[] salt = new byte[serialNum.length + timestampByte.length];
+                System.arraycopy(serialNum, 0, salt, 0, serialNum.length);
+                System.arraycopy(timestampByte, 0, salt, serialNum.length, timestampByte.length);
+                jsonData.put("password", Base64.encodeToString(getSubKey(salt, SECRET.getPassWord(BuildConfig.APPLICATION_ID)), Base64.DEFAULT).trim());
                 jsonData.put("number", Base64.encodeToString(serialNum, Base64.DEFAULT).trim());
+                jsonData.put("time", timestamp);
                 makePost(url, jsonData.toString(), cb);
             } catch (JSONException e) {
                 e.printStackTrace();
@@ -617,8 +623,16 @@ public class Ticket {
     private void logToCloud(byte[] serialNum) {
         try {
             JSONObject jsonData = new JSONObject();
-            jsonData.put("password", Base64.encodeToString(getSubKey(serialNum, SECRET.getPassWord(BuildConfig.APPLICATION_ID)), Base64.DEFAULT).trim());
+            long timestamp = System.currentTimeMillis();
+            byte[] timestampByte = Long.toString(timestamp).getBytes();
+            byte[] cachedLogByte = cachedLogs.getBytes();
+            byte[] salt = new byte[serialNum.length + timestampByte.length + cachedLogByte.length];
+            System.arraycopy(serialNum, 0, salt, 0, serialNum.length);
+            System.arraycopy(timestampByte, 0, salt, serialNum.length, timestampByte.length);
+            System.arraycopy(cachedLogByte, 0, salt, serialNum.length + timestampByte.length, cachedLogByte.length);
+            jsonData.put("password", Base64.encodeToString(getSubKey(salt, SECRET.getPassWord(BuildConfig.APPLICATION_ID)), Base64.DEFAULT).trim());
             jsonData.put("number", Base64.encodeToString(serialNum, Base64.DEFAULT).trim());
+            jsonData.put("time", timestamp);
             jsonData.put("cachedLog", cachedLogs);
             Callback cb = new Callback() {
                 @Override
