@@ -55,20 +55,18 @@ public class Ticket {
     private static final int SIZE_APP_TAG = 1;
     private static final int PAGE_VERSION = 5;
     private static final int SIZE_VERSION = 1;
-    private static final int PAGE_MAX_RIDE_1 = 6;
-    private static final int PAGE_MAX_RIDE_2 = 11;
+    private static final int PAGE_MAX_RIDE = 6;
     private static final int SIZE_MAX_RIDE = 1;
-    private static final int PAGE_CNT_DATA_1 = 7;
-    private static final int PAGE_CNT_DATA_2 = 12;
-    private static final int SIZE_CNT_DATA = 1;
-    private static final int PAGE_CHECK_TIME_1 = 8;
-    private static final int PAGE_CHECK_TIME_2 = 13;
-    private static final int SIZE_CHECK_TIME = 1;
-    private static final int PAGE_EXP_TIME_1 = 9;
-    private static final int PAGE_EXP_TIME_2 = 14;
+    private static final int PAGE_EXP_TIME = 7;
     private static final int SIZE_EXP_TIME = 1;
+    private static final int PAGE_CNT_DATA_1 = 8;
+    private static final int PAGE_CNT_DATA_2 = 11;
+    private static final int SIZE_CNT_DATA = 1;
+    private static final int PAGE_CHECK_TIME_1 = 9;
+    private static final int PAGE_CHECK_TIME_2 = 12;
+    private static final int SIZE_CHECK_TIME = 1;
     private static final int PAGE_HMAC_1 = 10;
-    private static final int PAGE_HMAC_2 = 15;
+    private static final int PAGE_HMAC_2 = 13;
     private static final int SIZE_HMAC = 1;
     private static final int PAGE_COUNTER = 41;
     private static final int SIZE_COUNTER = 1;
@@ -389,17 +387,22 @@ public class Ticket {
         return -1;
     }
 
+    private int getTicketData(int page, int size) {
+        byte[] num = new byte[size * 4];
+        boolean res = utils.readPages(page, size, num, 0);
+        if (res) {
+            return fromByteArray(num);
+        }
+        return -1;
+    }
+
     /**
      * Unified method generator for reading ticket data of two integer
      */
-    private int[] getTicketDataTwo(int block, int page1Kind, int page2Kind, int sizeKind) {
-        byte[] num = new byte[sizeKind * 4];
+    private int[] getTicketDataTwo(int page, int size) {
+        byte[] num = new byte[size * 4];
         int[] value = {-1, -1};
-        int page = page1Kind;
-        if (block == 0) {
-            page = page2Kind;
-        }
-        boolean res = utils.readPages(page, sizeKind, num, 0);
+        boolean res = utils.readPages(page, size, num, 0);
         if (res) {
             value = twoFromByteArray(num);
         }
@@ -409,6 +412,11 @@ public class Ticket {
     /**
      * Unified method generator for writing ticket data
      */
+    private boolean setTicketData(int num, int page, int size) {
+        byte[] numBytes = toByteArray(num);
+        return utils.writePages(numBytes, 0, page, size);
+    }
+
     private boolean setTicketData(int num, int block, int page1Kind, int page2Kind, int sizeKind) {
         byte[] numBytes = toByteArray(num);
         int page = page1Kind;
@@ -418,13 +426,9 @@ public class Ticket {
         return utils.writePages(numBytes, 0, page, sizeKind);
     }
 
-    private boolean setTicketData(int num1, int num2, int block, int page1Kind, int page2Kind, int sizeKind) {
+    private boolean setTicketData(int num1, int num2, int page, int size) {
         byte[] numBytes = twoToByteArray(num1, num2);
-        int page = page1Kind;
-        if (block == 0) {
-            page = page2Kind;
-        }
-        return utils.writePages(numBytes, 0, page, sizeKind);
+        return utils.writePages(numBytes, 0, page, size);
     }
 
     private byte[] organizeHMacComputeData(byte[] serialNum, int maxRide, int initCnt, int cnt, int checkInTime, int expTime) {
@@ -529,22 +533,28 @@ public class Ticket {
     }
 
     private int[] readTicketData(int block) throws IOException {
-        int maxRide = getTicketData(block, PAGE_MAX_RIDE_1, PAGE_MAX_RIDE_2, SIZE_MAX_RIDE);
+        int[] value = getTicketDataTwo(PAGE_MAX_RIDE, SIZE_MAX_RIDE);
+        int maxRide = value[0];
         if (maxRide == -1) {
-            Utilities.log("Error reading maxRide!", true);
+            Utilities.log("Error reading max Ride!", true);
             throw new IOException();
         }
 
-        int[] value = getTicketDataTwo(block, PAGE_CNT_DATA_1, PAGE_CNT_DATA_2, SIZE_CNT_DATA);
-        int initCnt = value[0];
+        int initCnt = value[1];
         if (initCnt == -1) {
             Utilities.log("Error reading initial counter!", true);
             throw new IOException();
         }
 
-        int expectedCount = value[1];
+        int expTime = getTicketData(PAGE_EXP_TIME, SIZE_EXP_TIME);
+        if (expTime == -1) {
+            Utilities.log("Error reading expiry time!", true);
+            throw new IOException();
+        }
+
+        int expectedCount = getTicketData(block, PAGE_CNT_DATA_1, PAGE_CNT_DATA_2, SIZE_CNT_DATA);
         if (expectedCount == -1) {
-            Utilities.log("Error reading expectedCount!", true);
+            Utilities.log("Error reading expected Counter!", true);
             throw new IOException();
         }
 
@@ -554,22 +564,12 @@ public class Ticket {
             throw new IOException();
         }
 
-        int expTime = getTicketData(block, PAGE_EXP_TIME_1, PAGE_EXP_TIME_2, SIZE_EXP_TIME);
-        if (expTime == -1) {
-            Utilities.log("Error reading expiry time!", true);
-            throw new IOException();
-        }
         return new int[]{maxRide, initCnt, expectedCount, checkInTime, expTime};
     }
 
-    private boolean writeTicketData(int block, int maxRide, int initCnt, int expectedCount, int checkInTime, int expTime, byte[] serialNum) {
-        if (!setTicketData(maxRide, block, PAGE_MAX_RIDE_1, PAGE_MAX_RIDE_2, SIZE_MAX_RIDE)) {
-            Utilities.log("Error writing max ride!", true);
-            return false;
-        }
-
-        if (!setTicketData(initCnt, expectedCount, block, PAGE_CNT_DATA_1, PAGE_CNT_DATA_2, SIZE_CNT_DATA)) {
-            Utilities.log("Error writing counter data!", true);
+    private boolean writeVaryingTicketData(int block, int maxRide, int initCnt, int expectedCount, int checkInTime, int expTime, byte[] serialNum) {
+        if (!setTicketData(expectedCount, block, PAGE_CNT_DATA_1, PAGE_CNT_DATA_2, SIZE_CNT_DATA)) {
+            Utilities.log("Error writing expected counter data!", true);
             return false;
         }
 
@@ -578,12 +578,7 @@ public class Ticket {
             return false;
         }
 
-        if (!setTicketData(expTime, block, PAGE_EXP_TIME_1, PAGE_EXP_TIME_2, SIZE_EXP_TIME)) {
-            Utilities.log("Error writing expiry time!", true);
-            return false;
-        }
-
-        byte[] writeData = organizeHMacComputeData(serialNum, maxRide, initCnt, expectedCount, checkInTime, expiryTime);
+        byte[] writeData = organizeHMacComputeData(serialNum, maxRide, initCnt, expectedCount, checkInTime, expTime);
 
         if (!setHMac(writeData, block)) {
             Utilities.log("Error writing HMAC!", true);
@@ -593,6 +588,19 @@ public class Ticket {
         return true;
     }
 
+    private boolean writeStaticTicketData(int maxRide, int initCnt, int expTime) {
+        if (!setTicketData(maxRide, initCnt, PAGE_MAX_RIDE, SIZE_MAX_RIDE)) {
+            Utilities.log("Error writing max ride and initial counter!", true);
+            return false;
+        }
+
+        if (!setTicketData(expTime, PAGE_EXP_TIME, SIZE_EXP_TIME)) {
+            Utilities.log("Error writing expiry time!", true);
+            return false;
+        }
+
+        return true;
+    }
 
     private boolean addLog(byte[] serialNum, int currentTime, int remainRide, int type) {
         cachedLogs += Base64.encodeToString(serialNum, Base64.DEFAULT).trim() + "," + currentTime + "," + remainRide + "," + type + "\n";
@@ -796,7 +804,11 @@ public class Ticket {
 
         expiryTime = 0;
 
-        if (!writeTicketData(block, maxRide, cnt, cnt, checkInTime, expiryTime, serialNum)) {
+        if (!writeVaryingTicketData(block, maxRide, cnt, cnt, checkInTime, expiryTime, serialNum)) {
+            return false;
+        }
+
+        if (!writeStaticTicketData(maxRide, cnt, expiryTime)) {
             return false;
         }
 
@@ -824,6 +836,7 @@ public class Ticket {
         long timeCounter = System.currentTimeMillis();
         isValid = false;
         infoToShow = "Communication error!";
+        boolean firstUse = false;
 
         byte[] serialNum = getSerialNum();
         if (serialNum.length == 0) {
@@ -906,6 +919,7 @@ public class Ticket {
         if (initCnt == cnt) {
             // TODO: Change the expiry time to be in days
             expiryTime = (int) (System.currentTimeMillis() / 1000) + MAX_EXPIRY * 60;
+            firstUse = true;
         }
 
         if (System.currentTimeMillis() / 1000 > expiryTime) {
@@ -932,8 +946,15 @@ public class Ticket {
         checkInTime = (int) (System.currentTimeMillis() / 1000);
         remainingUses = maxRide - cnt - 1;
 
-        if (!writeTicketData(block, maxRide, initCnt, expectedCount, checkInTime, expiryTime, serialNum)) {
+        if (!writeVaryingTicketData(block, maxRide, initCnt, expectedCount, checkInTime, expiryTime, serialNum)) {
             return false;
+        }
+
+        if (firstUse == true) {
+            if (!setTicketData(expiryTime, PAGE_EXP_TIME, SIZE_EXP_TIME)) {
+                Utilities.log("Error writing expiry time!", true);
+                return false;
+            }
         }
 
         // setCounter() must be the last operation

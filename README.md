@@ -7,7 +7,7 @@
 [Wipe Card](../../tree/wipe)
 
 Hide Secret:
-    
+
 ```bash
 ./gradlew hideSecretFromPropertiesFile -PpropertiesFileName=credentials.properties
 ```
@@ -32,18 +32,17 @@ Hide Secret:
 - 4 -> application tag
 - 5 -> version
 
-#### 2 ticket blocks
-- 6 -> max ride number (counter limit)
-- 7 -> initial counter, expected counter
-- 8 -> last check-in time
-- 9 -> expiration time
+#### static ticket data block
+- 6 -> max ride number (counter limit), initial counter
+- 7 -> expiration time
+#### Other 2 ticket blocks
+- 8 -> expected counter
+- 9 -> last check-in time
 - 10 -> hmac
 ---
-- 11 -> max ride number (counter limit)
-- 12 -> initial counter, expected counter
-- 13 -> last check-in time
-- 14 -> expiration time
-- 15 -> hmac
+- 11 -> expected counter
+- 12 -> last check-in time
+- 13 -> hmac
 
 #### Logs block
 - 30,31 -> timestamp, remaining ride, type
